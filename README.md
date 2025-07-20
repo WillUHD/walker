@@ -37,7 +37,7 @@ Here's a rough flowchart of Walker's average workflow (you can always refer to t
 2. Check if it has `rpath`s or not, using `otool -l`. If it does, see if each `rpath` library exists in each of the `rpath` paths. Finally, we can retrieve the absolute location of each `rpath` dependency. 
 3. Check if it has `loader_path`s, `executable_path`s, or absolute paths. These path retrievals are a lot simpler. 
 4. Queue all the nested dependencies found. 
-5. Copy this dependency to the target resultant folder. 
+5. Copy this dependency to the target resultant folder, and patch it with `install_name_tool` to make it `@loader_path` with the rest. 
 6. Loop again for each dependency in queue. 
 
 ## Future Release Plan

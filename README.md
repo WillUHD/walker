@@ -41,11 +41,11 @@ Here's a rough flowchart of Walker's average workflow (you can always refer to t
 6. Loop again for each dependency in queue. 
 
 ## Performance
-Yes, it's written in Java, but using `native-image`, it can analyze 1085 nested dependencies with highest depth level of 11 in around 25s. 
+Yes, it's written in Java, but using `native-image`, it can analyze 1085 nested dependencies with highest depth level of 11 in around 25s. The main limitation will almost certainly be IO and cmdline tools. 
 
 ## Future Release Plan
 - Concurrency support with virtual threads
-- Advanced dependency layout manager? (with UI?) so you could custom decide exactly which dependencies go where, etc. but this will require a lot of work. 
+- Advanced dependency layout manager? (with UI?) so you could custom decide exactly which dependencies go where, etc. 
 
 ## Hope this can help some people! 
 > by WillUHD

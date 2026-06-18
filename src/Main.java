@@ -16,16 +16,16 @@ public class Main{
         while(true) {
             var scanner = new Scanner(System.in);
             t.print("\nWalker 3 ", Terminal.Text.bold, Terminal.Colors.brightBlue);
-            t.println("by willuhd ", Terminal.Text.italic, Terminal.Colors.blue);
+            t.print("by willuhd ", Terminal.Text.italic, Terminal.Colors.blue);
+            IO.print("—— Enter the library path ");
+            t.print("(-h for help)", Terminal.Text.dim);
+            IO.println(": ");
+            t.set(Terminal.Text.italic, Terminal.Colors.green);
+            IO.print(">> ");
 
             Path depPath;
             boolean verbose;
             while (true) {
-                IO.print("Enter the library path ");
-                t.print("(--help if needed)", Terminal.Text.dim);
-                IO.println(": ");
-                t.set(Terminal.Text.italic, Terminal.Colors.green);
-                IO.print(">> ");
 
                 var s = scanner.nextLine().trim();
                 t.restore();
@@ -65,8 +65,6 @@ public class Main{
                     depPath.getFileName().toString()
                             .replace(".dylib", "")
                             .replace(".", ""));
-            t.print("\nSource dependency detected as ", Terminal.Colors.brightBlue);
-            IO.println(srcPath);
 
             try { Files.createDirectories(srcPath); }
             catch (IOException e) {
@@ -101,9 +99,9 @@ public class Main{
 
             IO.println("""
                     Summary:
-                        - finished in %.3f seconds
-                        - analyzed %d dependencies
-                        - saved in %s
+                      - finished in %.3f seconds
+                      - analyzed %d dependencies
+                      - saved in %s
                     Main library is %s
                     """.formatted(time, totalAnalyzed,
                     t.format(String.valueOf(srcPath), Terminal.Text.italic, Terminal.Colors.green),

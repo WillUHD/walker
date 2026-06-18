@@ -31,7 +31,7 @@ public class Terminal {
 		magenta("35"),
 		cyan("36"),
 		white("37"),
-		brightBlack("90"),
+		brightBlack("90"), // aka gray
 		brightRed("91"),
 		brightGreen("92"),
 		brightYellow("93"),

@@ -7,21 +7,8 @@ static Terminal t = new Terminal();
 void main(String[] args) {
     while(true) {
         var scanner = new Scanner(System.in);
-        IO.println("""
-            
-            `Will'     A     `UHD'       ,cOP  ,cWa                      \s
-              UHD     ,vA     ,V           YR    LK                      \s
-               WA:   ,JVM:   ,V  ,6"Yb.    IG    v2  ,MP' .gP"Ya `7walker\s
-                LK.  M' WA.  M '8)   MM    HT    WA ;Y   ,M'   Yb  WA' "'\s
-                `ER A'  `LK A'   walker    WI    LK;v2   20""\"""\"  LK    \s
-                 JAVA    :ER;   IS   BY    LL    ER `Mb. 25.    ,  v2    \s
-                  21      VF    `willuhd`.wUHD..wALk. v2. `WILL.  \s
-            
-                ---------============== walker ==============---------
-                                       version 2
-                                copyright WillUHD 2025
-                                   --help if needed
-            """);
+        t.format("Walker 3 by willuhd ", Terminal.Text.bold, Terminal.Colors.blue);
+        t.format("--help if needed\n", Terminal.Text.dim, Terminal.Colors.brightBlack);
 
         Path depPath;
         boolean verbose;
@@ -86,7 +73,7 @@ void main(String[] args) {
             System.exit(1);
         }
 
-        IO.println("Target directory created. Patching...");
+        IO.println("Target directory created. Patching...\n");
 
         toCopy.add(depPath);
         int count = 0;
@@ -104,7 +91,7 @@ void main(String[] args) {
                 stream.forEach(bin -> IO.println(send("otool -L \"" + bin + "\"")));
             } catch (IOException e) {System.err.println(Arrays.toString(e.getStackTrace()));}
         } else {
-            IO.println("Patching completed.");
+            IO.println("\rPatching completed.");
         }
 
         var endTime = System.nanoTime();
@@ -129,6 +116,7 @@ static Set<Path> analyzed = new HashSet<>();
 
 static void log(String msg) {
     if (logging) IO.println(msg);
+    else IO.print(("\r" + msg + "\033[K").translateEscapes());
 }
 
 static String send(String line) {

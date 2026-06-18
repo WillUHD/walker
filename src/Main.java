@@ -48,6 +48,9 @@ public class Main{
                 else if(s.endsWith("--verbose")) s = s.substring(0, s.length() - 9).trim();
                 else verbose = false;
 
+                if (s.equals("~")) s = System.getProperty("user.home");
+                else if (s.startsWith("~/")) s = System.getProperty("user.home") + s.substring(1);
+
                 depPath = Path.of(s);
 
                 if (!Files.exists(depPath) || !depPath.toString().endsWith(".dylib")) {

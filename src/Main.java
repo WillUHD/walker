@@ -1,8 +1,15 @@
 import java.io.*;
 import java.nio.file.*;
 import java.util.*;
+import java.util.concurrent.*;
+import java.util.concurrent.atomic.AtomicInteger;
 
 static Terminal t = new Terminal();
+
+static boolean logging = true;
+static Path srcPath;
+static final Set<Path> analyzed = ConcurrentHashMap.newKeySet();
+static final AtomicInteger count = new AtomicInteger(0);
 
 void main() {
     while(true) {
@@ -16,10 +23,8 @@ void main() {
             IO.println("Enter the path of the library: ");
             t.format(">> ", Terminal.Text.italic, Terminal.Colors.green);
 
-            // whitespace removal is needed because of flags
             var s = scanner.nextLine().trim();
 
-            // could use a switch statement with flags but there are really only 2 here
             if(s.startsWith("--help") || s.startsWith("-h")){
                 t.format("\nWalker 3 ", Terminal.Text.italic, Terminal.Colors.blue);
                 t.format("help\n", Terminal.Text.bold, Terminal.Colors.brightBlack);
@@ -34,31 +39,27 @@ void main() {
 
             verbose = true;
 
-            // magic numbers: "-v".length() == 2, "--verbose".length() == 9
             if(s.endsWith("-v")) s = s.substring(0, s.length() - 2).trim();
-            else if(s.endsWith("--verbose"))s  = s.substring(0, s.length() - 9).trim();
-            else verbose = false; // flag false if not verbose
+            else if(s.endsWith("--verbose")) s = s.substring(0, s.length() - 9).trim();
+            else verbose = false;
 
             depPath = Path.of(s);
 
-            // verify dylib information
-            // is basic because otool won't break on a broken dylib
             if (!Files.exists(depPath) || !depPath.toString().endsWith(".dylib")) {
                 IO.println("Path verification failed. --help for help. ");
                 continue;
-            } break; // break the loop only if these conditions are met
+            } break;
         }
 
         var startTime = System.nanoTime();
 
-        // makes the proper name for naming the folder (can't contain ".")
         srcPath = depPath.getParent().resolve(
                 depPath.getFileName().toString()
                         .replace(".dylib", "")
                         .replace(".", ""));
         IO.println("\nSource dependency detected as: " + srcPath);
 
-        try {Files.createDirectories(srcPath);}
+        try { Files.createDirectories(srcPath); }
         catch (IOException e) {
             System.err.println("Can't create the target folder, make sure the file system is writable.");
             System.exit(1);
@@ -66,46 +67,50 @@ void main() {
 
         IO.println("Target directory created. Patching...\n");
 
-        toCopy.add(depPath);
-        int count = 0;
-
+        // Reset state for new run
+        analyzed.clear();
+        count.set(0);
         logging = verbose;
-        while (!toCopy.isEmpty()) {
-            var current = toCopy.poll();
-            otool(current.toString());
-            count++;
+
+        // use virtual threads
+        try (var executor = Executors.newVirtualThreadPerTaskExecutor()) {
+            var phaser = new Phaser(1);
+            submitDependency(depPath, executor, phaser);
+            phaser.arriveAndAwaitAdvance();
         }
 
         if(verbose){
             IO.println("Patching completed. Reverifying: ");
             try (var stream = Files.list(srcPath)) {
                 stream.forEach(bin -> IO.println(send("otool -L \"" + bin + "\"")));
-            } catch (IOException e) {System.err.println(Arrays.toString(e.getStackTrace()));}
-        } else {
-            IO.println("\rPatching completed.");
-        }
+            } catch (IOException e) { System.err.println(Arrays.toString(e.getStackTrace())); }
+        } else IO.println("\rPatching completed.");
 
         var endTime = System.nanoTime();
-        var time = (endTime - startTime) / 1000000000f;
+        var time = (endTime - startTime) / 1_000_000_000f;
+        var totalAnalyzed = count.get();
 
-        IO.println("\nProcess Completed. Walker: \n" +
+        IO.println("\nSummary: \n" +
                 "  - finished in " + time + " seconds\n" +
-                "  - analyzed " + count + " dependencies\n" +
-                "  - performance is " + (count / time) + " dependencies per second\n" +
+                "  - analyzed " + totalAnalyzed + " dependencies\n" +
+                "  - performance is " + (totalAnalyzed / time) + " dependencies per second\n" +
                 "  - saved in source " + srcPath + "\n" +
-                "\nMain binary is " + depPath.getFileName());
-
-        toCopy = new LinkedList<>();
-        analyzed = new HashSet<>();
+                "\nMain library is " + depPath.getFileName());
     }
 }
 
-static boolean logging = true;
-static Path srcPath;
-static Queue<Path> toCopy = new LinkedList<>();
-static Set<Path> analyzed = new HashSet<>();
+static void submitDependency(Path dep, ExecutorService executor, Phaser phaser) {
+    // only proceeds if we haven't seen this path yet
+    if (!analyzed.add(dep)) return;
 
-static void log(String msg) {
+    phaser.register();
+    executor.submit(() -> {
+        try {otool(dep, executor, phaser);}
+        finally {phaser.arriveAndDeregister();}
+    });
+}
+
+static synchronized void log(String msg) {
     if (logging) IO.println(msg);
     else IO.print(("\r" + msg + "\033[K").translateEscapes());
 }
@@ -124,48 +129,67 @@ static String send(String line) {
     return sb.toString().trim();
 }
 
-public static void otool(String bin) {
-    var current = Path.of(bin);
-    if (!analyzed.add(current)) return;
+public static void otool(Path current, ExecutorService executor, Phaser phaser) {
+    count.incrementAndGet();
+    log("Analyzing current file " + current);
 
-    log("Analyzing current file " + bin);
+    var bin = current.toString();
     var binDir = current.getParent();
     var otools = send("otool -L " + bin).split("\n");
 
+    // copy original file to the target location
+    var copiedPath = srcPath.resolve(current.getFileName());
+    log("Copying path " + current + " to " + copiedPath);
+    try {
+        Files.copy(current, copiedPath, StandardCopyOption.REPLACE_EXISTING);
+    } catch (IOException e) {
+        System.err.println(Arrays.toString(e.getStackTrace()));
+    }
+
+    // set the library ID inside the copied binary
+    send("install_name_tool -id \"@loader_path/" + current.getFileName() + "\" " + copiedPath);
+
+    // identify @rpaths and submit them
     var rPaths = findRPaths(bin);
     var len = rPaths.length;
     if (len > 0){
         for (var p : rPaths) {
-            toCopy.add(Path.of(p));
+            var rpathDep = Path.of(p);
+            submitDependency(rpathDep, executor, phaser);
             log("Detected @rpath dependency: " + p);
+
+            // patch the copied binary's rpath reference to use @loader_path
+            send("install_name_tool -change \"@rpath/" + rpathDep.getFileName() + "\" \"@loader_path/" + rpathDep.getFileName() + "\" \"" + copiedPath + "\"");
         }
         log("@rpath detection complete: " + len + " rpaths. ");
     } else log("@rpath clear.");
 
+    // parse and submit general dependencies
     for (var i = 1; i < otools.length; i++) {
         var line = otools[i].trim();
+        if (!line.contains("(")) continue;
         line = line.substring(0, line.indexOf('(')).trim();
         log("Resolving current line: " + line);
 
+        Path dep = null;
         if (line.startsWith("@loader_path/")) {
-            var dep = binDir.resolve(line.substring("@loader_path/".length()));
-            toCopy.add(dep);
-            log("Queued @loader_path dependency: " + dep);
+            dep = binDir.resolve(line.substring("@loader_path/".length()));
         } else if (line.startsWith("@executable_path/")) {
-            var dep = binDir.resolve("Frameworks").resolve(line.substring("@executable_path/".length()));
-            toCopy.add(dep);
-            log("Queued @executable_path dependency: " + dep);
+            dep = binDir.resolve("Frameworks").resolve(line.substring("@executable_path/".length()));
         } else if (!line.startsWith("/usr/lib") && !line.startsWith("/System/Library")) {
-            var dep = Path.of(line);
-            toCopy.add(dep);
+            dep = Path.of(line);
+        }
+
+        if (dep != null) {
+            submitDependency(dep, executor, phaser);
             log("Queued dependency: " + dep);
+
+            // patch the copied binary's dependency path to point to @loader_path
+            send("install_name_tool -change \"" + line + "\" \"@loader_path/" + dep.getFileName() + "\" \"" + copiedPath + "\"");
         }
     }
 
     log("Dependency " + bin + " finished analyzation. ");
-
-    copy(current, bin);
-    log("Current process for " + bin + " completed. ");
 }
 
 private static String[] findRPaths(String path) {
@@ -211,15 +235,4 @@ private static String[] findRPaths(String path) {
 
     log("@rpath analysis for " + path + " complete.");
     return finalPaths.toArray(new String[0]);
-}
-
-private static void copy(Path execPath, String origPath) {
-    var copiedPath = srcPath.resolve(execPath.getFileName());
-    log("Copying path " + execPath + " to " + copiedPath);
-    try {Files.copy(execPath, copiedPath, StandardCopyOption.REPLACE_EXISTING);}
-    catch (IOException e) {System.err.println(Arrays.toString(e.getStackTrace()));}
-    log("Patching path linking using install_name_tool. ");
-
-    send("install_name_tool -id \"@loader_path/" + execPath.getFileName() + "\" " + copiedPath);
-    send("install_name_tool -change \"" + execPath + "\" \"@loader_path/" + execPath.getFileName() + "\" \"" + origPath + "\"");
 }

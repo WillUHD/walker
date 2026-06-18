@@ -12,12 +12,12 @@
         }
         @media (prefers-color-scheme: dark) {
             :root {
-                --bg: #121212; /* Deep midnight charcoal background */
-                --win: #1a1a1a; /* Rich surface boxes */
+                --bg: #121212;
+                --win: #1a1a1a;
                 --text: #f5f5f7; --dim: #8e8e93;
-                --border: #2c2c2e; /* Soft graphite boundaries */
+                --border: #2c2c2e;
                 --blue: #0a84ff; --red: #ff453a; --green: #30d158;
-                --btn: #2c2c2e; --btn-border: #3e3e42; --head: #1c1c1e; /* Sleek dark headers */
+                --btn: #2c2c2e; --btn-border: #3e3e42; --head: #1c1c1e;
                 --purple: #bf80ff; --purple-light: rgba(191, 128, 255, 0.15);
             }
         }
@@ -314,6 +314,35 @@
         </svg>
     `;
 
+    // --- Consolidated Column-View UI Generator Helpers ---
+    function createColumn(width, onEmptyClick) {
+        const container = document.createElement('div');
+        container.className = 'column-container';
+        container.style.width = width;
+
+        const col = document.createElement('div');
+        col.className = 'column';
+        if (onEmptyClick) {
+            col.onclick = (e) => {
+                if (e.target === col) onEmptyClick();
+            };
+        }
+        container.appendChild(col);
+        return { container, col };
+    }
+
+    function makeItemInner(name, isDir, hasArrow, fallbackChar = '📄', hoverTitle = '') {
+        const iconHtml = isDir ? '📁' : `<span class="icon-container"><img class="item-icon" src="/dylib.png" onerror="this.outerHTML='${fallbackChar}'" /></span>`;
+        const title = hoverTitle || name;
+        return `
+            <div class="item-left">
+                <span style="margin-right:6px; display:inline-flex; align-items:center;">${iconHtml}</span>
+                <span class="item-name" title="${title}">${name}</span>
+            </div>
+            ${hasArrow ? MAC_DISCLOSURE : ''}
+        `;
+    }
+
     EL('resolve-btn').addEventListener('click', () => {
         const btn = EL('resolve-btn');
         if (btn.innerText === "Resolve") {
@@ -407,12 +436,12 @@
         const query = EL('fb-search').value.toLowerCase().trim();
 
         fbSelPath.forEach((colData, level) => {
-            const container = document.createElement('div');
-            container.className = 'column-container';
-            container.style.width = '220px';
-
-            const col = document.createElement('div');
-            col.className = 'column';
+            const { container, col } = createColumn('220px', () => {
+                fbSelPath = fbSelPath.slice(0, level);
+                fbSelectedPath = level > 0 ? fbSelPath[level - 1].path : "";
+                EL('fb-select').disabled = true;
+                renderFbColumns();
+            });
 
             const filtered = colData.files.filter(f => f.name.toLowerCase().includes(query));
             filtered.sort((a,b) => b.isDir - a.isDir || a.name.localeCompare(b.name)).forEach(f => {
@@ -420,16 +449,7 @@
                 const isSelected = (fbSelectedPath === f.absPath) || (fbSelPath[level + 1] && fbSelPath[level + 1].path === f.absPath);
 
                 div.className = 'col-item' + (isSelected ? ' selected' : '');
-
-                const icon = f.isDir ? "📁" : `<span class="icon-container"><img class="item-icon" src="/dylib.png" onerror="this.outerHTML='📄'" /></span>`;
-
-                div.innerHTML = `
-                    <div class="item-left">
-                        <span style="margin-right:6px; display:inline-flex; align-items:center;">${icon}</span>
-                        <span class="item-name" title="${f.name}">${f.name}</span>
-                    </div>
-                    ${f.isDir ? MAC_DISCLOSURE : ''}
-                `;
+                div.innerHTML = makeItemInner(f.name, f.isDir, f.isDir, '📄');
 
                 div.onclick = () => {
                     fbSelectedPath = f.absPath;
@@ -444,20 +464,6 @@
 
                 col.appendChild(div);
             });
-
-            // Empty space deselect listener for modal columns
-            col.onclick = (e) => {
-                if (e.target === col) {
-                    fbSelPath = fbSelPath.slice(0, level);
-                    if (level > 0) {
-                        fbSelectedPath = fbSelPath[level - 1].path;
-                    } else {
-                        fbSelectedPath = "";
-                    }
-                    EL('fb-select').disabled = true;
-                    renderFbColumns();
-                }
-            };
 
             container.appendChild(col);
             browser.appendChild(container);
@@ -620,12 +626,17 @@
 
         if (filteredIds.length === 0) return;
 
-        const container = document.createElement('div');
-        container.className = 'column-container';
-        container.style.width = (savedWidths && savedWidths[level]) ? savedWidths[level] : '250px';
+        const width = (savedWidths && savedWidths[level]) ? savedWidths[level] : '250px';
+        const { container, col } = createColumn(width, () => {
+            selPath = selPath.slice(0, level);
+            renderAndAlignColumn(level);
 
-        const col = document.createElement('div');
-        col.className = 'column';
+            // Sweep trailing spacers after navigation settlements
+            setTimeout(() => {
+                const spacer = EL('scroll-spacer');
+                if (spacer) spacer.remove();
+            }, 350);
+        });
 
         filteredIds.forEach(id => {
             const node = state.nodes[id]; if(!node) return;
@@ -635,22 +646,13 @@
             const modified = isNodeModified(id);
             div.className = 'col-item' + (selPath[level] === id ? ' selected' : '') + (node.isMissing ? ' missing' : '') + (node.isSystem ? ' system' : '') + (modified ? ' modified' : '');
 
-            const dylibUrl = "/dylib.png";
-            const dylibIconHtml = `<span class="icon-container"><img class="item-icon" src="${dylibUrl}" onerror="this.outerHTML='📁'" /></span>`;
-
             const visibleChildren = Object.keys(node.children).filter(cid => {
                 const child = state.nodes[cid];
                 return child && (showSystemLibs || !child.isSystem);
             });
             const hasChildren = visibleChildren.length > 0;
 
-            div.innerHTML = `
-                <div class="item-left">
-                    ${dylibIconHtml}
-                    <span class="item-name" title="${id}">${node.fileName}</span>
-                </div>
-                ${hasChildren ? MAC_DISCLOSURE : ''}
-            `;
+            div.innerHTML = makeItemInner(node.fileName, false, hasChildren, '📁', id);
 
             div.onclick = () => {
                 selPath = selPath.slice(0, level);
@@ -659,22 +661,6 @@
             };
             col.appendChild(div);
         });
-
-        // Empty space click deselect behavior matching native Finder
-        col.onclick = (e) => {
-            if (e.target === col) {
-                selPath = selPath.slice(0, level);
-                renderAndAlignColumn(level);
-
-                // Sweep trailing spacers after navigation settlements
-                setTimeout(() => {
-                    const spacer = EL('scroll-spacer');
-                    if (spacer) spacer.remove();
-                }, 350);
-            }
-        };
-
-        container.appendChild(col);
 
         const handle = document.createElement('div');
         handle.className = 'resize-handle';

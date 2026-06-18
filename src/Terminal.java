@@ -1,7 +1,6 @@
 /// # `Terminal.java` (TerminalTools)
 ///
 /// A lightweight, user-friendly ANSI terminal wrapper that (mostly) works on all platforms.
-/// > [!NOTE] - Currently, **public methods are `void` and they only print to IO**.
 ///
 /// ### Design
 /// - Uses the JDK15 `.translateEscapes()` to properly escape instead of printing a literal
@@ -15,9 +14,11 @@
 ///
 /// ### Use this class
 /// - **Instantiate**: `var t = new Terminal();` and call things like `t.format();`
-/// - `format`: Formats a string and prints it to the terminal.
-/// - `format256`: Formats a string using `xterm-256color` as an integer, for both text/background
-/// - `formatRGB`: Formats a string using individual integers to RGB, for both text/background
+/// - `format`: Formats a string and returns it.
+/// - `format256`: Formats a string using `xterm-256color` as an integer, for both text/background.
+/// - `formatRGB`: Formats a string using individual integers to RGB, for both text/background.
+/// - `print`/`println`: Outputs formatted text to the terminal.
+/// - `set`/`restore`: Changes persistent styling attributes.
 public class Terminal {
 
 	/// ### `Colors`
@@ -38,29 +39,7 @@ public class Terminal {
 		brightBlue("94"),
 		brightMagenta("95"),
 		brightCyan("96"),
-		brightWhite("97"),
-
-		// macOS System Colors
-		xRed("38;2;255;59;48"),
-		xOrange("38;2;255;149;0"),
-		xYellow("38;2;255;204;0"),
-		xGreen("38;2;52;199;89"),
-		xMint("38;2;0;199;190"),
-		xTeal("38;2;48;176;199"),
-		xCyan("38;2;50;173;230"),
-		xBlue("38;2;0;122;255"),
-		xIndigo("38;2;88;86;214"),
-		xPurple("38;2;175;82;222"),
-		xPink("38;2;255;45;85"),
-		xBrown("38;2;162;132;94"),
-
-		// macOS System Grays
-		gray("38;2;142;142;147"),
-		gray2("38;2;174;174;178"),
-		gray3("38;2;199;199;204"),
-		gray4("38;2;209;209;214"),
-		gray5("38;2;229;229;234"),
-		gray6("38;2;242;242;247");
+		brightWhite("97");
 
 		private final String code;
 		Colors(String code){this.code = code;}
@@ -85,29 +64,7 @@ public class Terminal {
 		brightBlue("104"),
 		brightMagenta("105"),
 		brightCyan("106"),
-		brightWhite("107"),
-
-		// macOS System Colors
-		xRed("48;2;255;59;48"),
-		xOrange("48;2;255;149;0"),
-		xYellow("48;2;255;204;0"),
-		xGreen("48;2;52;199;89"),
-		xMint("48;2;0;199;190"),
-		xTeal("48;2;48;176;199"),
-		xCyan("48;2;50;173;230"),
-		xBlue("48;2;0;122;255"),
-		xIndigo("48;2;88;86;214"),
-		xPurple("48;2;175;82;222"),
-		xPink("48;2;255;45;85"),
-		xBrown("48;2;162;132;94"),
-
-		// macOS System Grays
-		gray("48;2;142;142;147"),
-		gray2("48;2;174;174;178"),
-		gray3("48;2;199;199;204"),
-		gray4("48;2;209;209;214"),
-		gray5("48;2;229;229;234"),
-		gray6("48;2;242;242;247");
+		brightWhite("107");
 
 		private final String code;
 		Background(String code){this.code = code;}
@@ -132,81 +89,147 @@ public class Terminal {
 		public String getCode(){return code;}
 	}
 
-	private static final String esc = "\033";
+	private static final String esc = "\u001B";
 
 	private static String color256(int code) {return "38;5;" + code;}
 	private static String bg256(int code) {return "48;5;" + code;}
 	private static String colorRGB(int r, int g, int b) {return "38;2;" + r + ";" + g + ";" + b;}
 	private static String bgRGB(int r, int g, int b) {return "48;2;" + r + ";" + g + ";" + b;}
 
-	// put content first because java problem
 	private static String build(String content, String... codes) {
 		return (esc + "[" + String.join(";", codes) + "m" + content + esc + "[0m").translateEscapes();
 	}
 
-	void format(String s, Text t, Colors c) {IO.print(build(s, t.getCode(), c.getCode()));}
-	void format(String s, Text t, Colors c, Background b) {IO.print(build(s, t.getCode(), c.getCode(), b.getCode()));}
-	void format(String s, Text t) {IO.print(build(s, t.getCode()));}
-	void format(String s, Colors c) {IO.print(build(s, c.getCode()));}
-	void format(String s, Background b) {IO.print(build(s, b.getCode()));}
-	void format(String s, Colors c, Background b) {IO.print(build(s, c.getCode(), b.getCode()));}
+	private static String buildSet(String... codes) {
+		return (esc + "[" + String.join(";", codes) + "m").translateEscapes();
+	}
 
-	void format256(String s, int f256) {IO.print(build(s, color256(f256)));}
-	void format256(String s, int f256, int b256) {IO.print(build(s, color256(f256), bg256(b256)));}
-	void format256(String s, Text t, int f256) {IO.print(build(s, t.getCode(), color256(f256)));}
-	void format256(String s, Text t, int f256, int b256) {IO.print(build(s, t.getCode(), color256(f256), bg256(b256)));}
+	// Formatting Methods (Returning Strings)
+	String format(String s, Text t, Colors c) {return build(s, t.getCode(), c.getCode());}
+	String format(String s, Text t, Colors c, Background b) {return build(s, t.getCode(), c.getCode(), b.getCode());}
+	String format(String s, Text t) {return build(s, t.getCode());}
+	String format(String s, Colors c) {return build(s, c.getCode());}
+	String format(String s, Background b) {return build(s, b.getCode());}
+	String format(String s, Colors c, Background b) {return build(s, c.getCode(), b.getCode());}
 
-	void formatRGB(String s, int r, int g, int b) {IO.print(build(s, colorRGB(r, g, b)));}
-	void formatRGB(String s, int fgR, int fgG, int fgB, int bgR, int bgG, int bgB) {IO.print(build(s, colorRGB(fgR, fgG, fgB), bgRGB(bgR, bgG, bgB)));}
-	void formatRGB(String s, Text t, int r, int g, int b) {IO.print(build(s, t.getCode(), colorRGB(r, g, b)));}
-	void formatRGB(String s, Text t, int fgR, int fgG, int fgB, int bgR, int bgG, int bgB) {IO.print(build(s, t.getCode(), colorRGB(fgR, fgG, fgB), bgRGB(bgR, bgG, bgB)));}
+	String format256(String s, int f256) {return build(s, color256(f256));}
+	String format256(String s, int f256, int b256) {return build(s, color256(f256), bg256(b256));}
+	String format256(String s, Text t, int f256) {return build(s, t.getCode(), color256(f256));}
+	String format256(String s, Text t, int f256, int b256) {return build(s, t.getCode(), color256(f256), bg256(b256));}
+
+	String formatRGB(String s, int r, int g, int b) {return build(s, colorRGB(r, g, b));}
+	String formatRGB(String s, int fgR, int fgG, int fgB, int bgR, int bgG, int bgB) {return build(s, colorRGB(fgR, fgG, fgB), bgRGB(bgR, bgG, bgB));}
+	String formatRGB(String s, Text t, int r, int g, int b) {return build(s, t.getCode(), colorRGB(r, g, b));}
+	String formatRGB(String s, Text t, int fgR, int fgG, int fgB, int bgR, int bgG, int bgB) {return build(s, t.getCode(), colorRGB(fgR, fgG, fgB), bgRGB(bgR, bgG, bgB));}
+
+	// Printing Methods
+	void print(String s) {IO.print(s);}
+	void println() {IO.println();}
+	void println(String s) {IO.println(s);}
+
+	void print(String s, Text t, Colors c) {IO.print(format(s, t, c));}
+	void print(String s, Text t, Colors c, Background b) {IO.print(format(s, t, c, b));}
+	void print(String s, Text t) {IO.print(format(s, t));}
+	void print(String s, Colors c) {IO.print(format(s, c));}
+	void print(String s, Background b) {IO.print(format(s, b));}
+	void print(String s, Colors c, Background b) {IO.print(format(s, c, b));}
+
+	void println(String s, Text t, Colors c) {IO.println(format(s, t, c));}
+	void println(String s, Text t, Colors c, Background b) {IO.println(format(s, t, c, b));}
+	void println(String s, Text t) {IO.println(format(s, t));}
+	void println(String s, Colors c) {IO.println(format(s, c));}
+	void println(String s, Background b) {IO.println(format(s, b));}
+	void println(String s, Colors c, Background b) {IO.println(format(s, c, b));}
+
+	void print256(String s, int f256) {IO.print(format256(s, f256));}
+	void print256(String s, int f256, int b256) {IO.print(format256(s, f256, b256));}
+	void print256(String s, Text t, int f256) {IO.print(format256(s, t, f256));}
+	void print256(String s, Text t, int f256, int b256) {IO.print(format256(s, t, f256, b256));}
+
+	void println256(String s, int f256) {IO.println(format256(s, f256));}
+	void println256(String s, int f256, int b256) {IO.println(format256(s, f256, b256));}
+	void println256(String s, Text t, int f256) {IO.println(format256(s, t, f256));}
+	void println256(String s, Text t, int f256, int b256) {IO.println(format256(s, t, f256, b256));}
+
+	void printRGB(String s, int r, int g, int b) {IO.print(formatRGB(s, r, g, b));}
+	void printRGB(String s, int fgR, int fgG, int fgB, int bgR, int bgG, int bgB) {IO.print(formatRGB(s, fgR, fgG, fgB, bgR, bgG, bgB));}
+	void printRGB(String s, Text t, int r, int g, int b) {IO.print(formatRGB(s, t, r, g, b));}
+	void printRGB(String s, Text t, int fgR, int fgG, int fgB, int bgR, int bgG, int bgB) {IO.print(formatRGB(s, t, fgR, fgG, fgB, bgR, bgG, bgB));}
+
+	void printlnRGB(String s, int r, int g, int b) {IO.println(formatRGB(s, r, g, b));}
+	void printlnRGB(String s, int fgR, int fgG, int fgB, int bgR, int bgG, int bgB) {IO.println(formatRGB(s, fgR, fgG, fgB, bgR, bgG, bgB));}
+	void printlnRGB(String s, Text t, int r, int g, int b) {IO.println(formatRGB(s, t, r, g, b));}
+	void printlnRGB(String s, Text t, int fgR, int fgG, int fgB, int bgR, int bgG, int bgB) {IO.println(formatRGB(s, t, fgR, fgG, fgB, bgR, bgG, bgB));}
+
+	// State-setting Methods
+	void set(Text t) {IO.print(buildSet(t.getCode()));}
+	void set(Colors c) {IO.print(buildSet(c.getCode()));}
+	void set(Background b) {IO.print(buildSet(b.getCode()));}
+	void set(Text t, Colors c) {IO.print(buildSet(t.getCode(), c.getCode()));}
+	void set(Text t, Colors c, Background b) {IO.print(buildSet(t.getCode(), c.getCode(), b.getCode()));}
+	void set(Colors c, Background b) {IO.print(buildSet(c.getCode(), b.getCode()));}
+
+	void set256(int f256) {IO.print(buildSet(color256(f256)));}
+	void set256(int f256, int b256) {IO.print(buildSet(color256(f256), bg256(b256)));}
+	void set256(Text t, int f256) {IO.print(buildSet(t.getCode(), color256(f256)));}
+	void set256(Text t, int f256, int b256) {IO.print(buildSet(t.getCode(), color256(f256), bg256(b256)));}
+
+	void setRGB(int r, int g, int b) {IO.print(buildSet(colorRGB(r, g, b)));}
+	void setRGB(int fgR, int fgG, int fgB, int bgR, int bgG, int bgB) {IO.print(buildSet(colorRGB(fgR, fgG, fgB), bgRGB(bgR, bgG, bgB)));}
+	void setRGB(Text t, int r, int g, int b) {IO.print(buildSet(t.getCode(), colorRGB(r, g, b)));}
+	void setRGB(Text t, int fgR, int fgG, int fgB, int bgR, int bgG, int bgB) {IO.print(buildSet(t.getCode(), colorRGB(fgR, fgG, fgB), bgRGB(bgR, bgG, bgB)));}
+
+	/// Restores the terminal formatting back to the system default configuration.
+	public void restore() {
+		IO.print((esc + "[0m").translateEscapes());
+	}
 
 	// error template
 	void error(String error){
-		format256(" error ", Text.bold,255, 160);
-		format(" " + error + "\n", Text.italic, Colors.red);
+		print256(" error ", Text.bold, 255, 160);
+		print(" " + error + "\n", Text.italic, Colors.red);
 	}
 	void error(String error, String method){
-		format256(" error ", Text.bold,255, 160);
-		format(" - " + method + ": ", Text.bold, Colors.brightRed);
-		format(error + "\n", Text.italic, Colors.red);
+		print256(" error ", Text.bold, 255, 160);
+		print(" - " + method + ": ", Text.bold, Colors.brightRed);
+		print(error + "\n", Text.italic, Colors.red);
 	}
 	void error(String error, String method, int num){
-		format256(" error ", Text.bold,255, 160);
-		format(" - " + method + "[" + num +"]: ", Text.bold, Colors.brightRed);
-		format(error + "\n", Text.italic, Colors.red);
+		print256(" error ", Text.bold, 255, 160);
+		print(" - " + method + "[" + num +"]: ", Text.bold, Colors.brightRed);
+		print(error + "\n", Text.italic, Colors.red);
 	}
 
 	// success template
 	void success(String success){
-		format256(" success ", Text.bold,255, 71);
-		format(" " + success + "\n", Text.italic, Colors.green);
+		print256(" success ", Text.bold, 255, 71);
+		print(" " + success + "\n", Text.italic, Colors.green);
 	}
 	void success(String success, String method){
-		format256(" success ", Text.bold,255, 71);
-		format(" - " + method + ": ", Text.bold, Colors.brightGreen);
-		format(success + "\n", Text.italic, Colors.green);
+		print256(" success ", Text.bold, 255, 71);
+		print(" - " + method + ": ", Text.bold, Colors.brightGreen);
+		print(success + "\n", Text.italic, Colors.green);
 	}
 	void success(String success, String method, int num){
-		format256(" success ", Text.bold,255, 71);
-		format(" - " + method + "[" + num +"]: ", Text.bold, Colors.brightGreen);
-		format(success + "\n", Text.italic, Colors.green);
+		print256(" success ", Text.bold, 255, 71);
+		print(" - " + method + "[" + num +"]: ", Text.bold, Colors.brightGreen);
+		print(success + "\n", Text.italic, Colors.green);
 	}
 
 	// warning template
 	void warn(String warning){
-		format256(" warning ", Text.bold,0, 214);
-		format(" " + warning + "\n", Text.italic, Colors.yellow);
+		print256(" warning ", Text.bold, 0, 214);
+		print(" " + warning + "\n", Text.italic, Colors.yellow);
 	}
 	void warn(String warning, String method){
-		format256(" warning ", Text.bold,0, 214);
-		format(" - " + method + ": ", Text.bold, Colors.brightYellow);
-		format(warning + "\n", Text.italic, Colors.yellow);
+		print256(" warning ", Text.bold, 0, 214);
+		print(" - " + method + ": ", Text.bold, Colors.brightYellow);
+		print(warning + "\n", Text.italic, Colors.yellow);
 	}
 	void warn(String warning, String method, int num){
-		format256(" warning ", Text.bold,0, 214);
-		format(" - " + method + "[" + num +"]: ", Text.bold, Colors.brightYellow);
-		format(warning + "\n", Text.italic, Colors.yellow);
+		print256(" warning ", Text.bold, 0, 214);
+		print(" - " + method + "[" + num +"]: ", Text.bold, Colors.brightYellow);
+		print(warning + "\n", Text.italic, Colors.yellow);
 	}
 
 	// interaction stuff

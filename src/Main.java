@@ -15,26 +15,30 @@ public class Main{
     void main() {
         while(true) {
             var scanner = new Scanner(System.in);
-            t.format("\nWalker 3 by willuhd ", Terminal.Text.bold, Terminal.Colors.blue);
-            t.format("--help if needed\n", Terminal.Text.dim, Terminal.Colors.gray2);
+            t.print("\nWalker 3 ", Terminal.Text.bold, Terminal.Colors.brightBlue);
+            t.println("by willuhd ", Terminal.Text.italic, Terminal.Colors.blue);
 
             Path depPath;
             boolean verbose;
             while (true) {
-                IO.println("Enter the path of the library: ");
-                t.format(">> ", Terminal.Text.italic, Terminal.Colors.green);
+                IO.print("Enter the library path ");
+                t.print("(--help if needed)", Terminal.Text.dim);
+                IO.println(": ");
+                t.set(Terminal.Text.italic, Terminal.Colors.green);
+                IO.print(">> ");
 
                 var s = scanner.nextLine().trim();
+                t.restore();
 
                 if(s.startsWith("--help") || s.startsWith("-h")){
-                    t.format("\nWalker 3 ", Terminal.Text.italic, Terminal.Colors.blue);
-                    t.format("help\n", Terminal.Text.bold, Terminal.Colors.gray);
-                    t.format("print this help menu: ", Terminal.Text.italic, Terminal.Colors.gray);
-                    t.format("--help\n", Terminal.Text.bold, Terminal.Colors.blue);
-                    t.format("maximum verbosity: ", Terminal.Text.italic, Terminal.Colors.gray);
-                    t.format("--verbose\n", Terminal.Text.bold, Terminal.Colors.blue);
-                    t.format("shut down Walker: ", Terminal.Text.italic, Terminal.Colors.gray);
-                    t.format("--shutdown\n\n", Terminal.Text.bold, Terminal.Colors.blue);
+                    t.print("\n          Walker ", Terminal.Text.italic, Terminal.Colors.blue);
+                    t.println("help", Terminal.Text.bold, Terminal.Colors.blue);
+                    t.print("  print this help menu: ", Terminal.Text.dim);
+                    t.println("--help", Terminal.Colors.brightBlue);
+                    t.print("  maximum verbosity: ", Terminal.Text.dim);
+                    t.println("--verbose", Terminal.Colors.brightBlue);
+                    t.print("  shut down Walker: ", Terminal.Text.dim);
+                    t.println("--shutdown\n", Terminal.Colors.brightBlue);
                     continue;
                 } else if(s.startsWith("--shutdown") || s.startsWith("-s")) System.exit(0);
 
@@ -58,7 +62,8 @@ public class Main{
                     depPath.getFileName().toString()
                             .replace(".dylib", "")
                             .replace(".", ""));
-            IO.println("\nSource dependency detected as: " + srcPath);
+            t.print("\nSource dependency detected as ", Terminal.Colors.brightBlue);
+            IO.println(srcPath);
 
             try { Files.createDirectories(srcPath); }
             catch (IOException e) {
@@ -66,9 +71,9 @@ public class Main{
                 System.exit(1);
             }
 
-            IO.println("Target directory created. Patching...\n");
+            IO.println("Target directory created. Patching...\u001B[?7l");
 
-            // Reset state for new run
+            // reset state for new run
             analyzed.clear();
             count.set(0);
             logging = verbose;
@@ -85,18 +90,21 @@ public class Main{
                 try (var stream = Files.list(srcPath)) {
                     stream.forEach(bin -> IO.println(send("otool -L \"" + bin + "\"")));
                 } catch (IOException e) { t.error(Arrays.toString(e.getStackTrace())); }
-            } else IO.println("\rPatching completed.");
+            } else IO.println("\r\rPatching completed.\u001B[K\n");
 
             var endTime = System.nanoTime();
             var time = (endTime - startTime) / 1_000_000_000f;
             var totalAnalyzed = count.get();
 
-            IO.println("\nSummary: \n" +
-                    "  - finished in " + time + " seconds\n" +
-                    "  - analyzed " + totalAnalyzed + " dependencies\n" +
-                    "  - performance is " + (totalAnalyzed / time) + " dependencies per second\n" +
-                    "  - saved in source " + srcPath + "\n" +
-                    "\nMain library is " + depPath.getFileName());
+            IO.println("""
+                    Summary:
+                        - finished in %.3f seconds
+                        - analyzed %d dependencies
+                        - saved in %s
+                    Main library is %s
+                    """.formatted(time, totalAnalyzed,
+                    t.format(String.valueOf(srcPath), Terminal.Text.italic, Terminal.Colors.green),
+                    depPath.getFileName()));
         }
     }
 
@@ -113,7 +121,7 @@ public class Main{
 
     static synchronized void log(String msg) {
         if (logging) IO.println(msg);
-        else IO.print(("\033[7l\r" + msg + "\033[K").translateEscapes());
+        else IO.print(("\r" + msg + "\u001B[K").translateEscapes());
     }
 
     static String send(String line) {
@@ -224,7 +232,7 @@ public class Main{
         }
 
         List<String> finalPaths = new ArrayList<>();
-        for (var dir : rDirs) {
+        for (var dir : rDirs)
             for (var name : rPaths) {
                 var candidate = dir + name;
                 if (Files.exists(Path.of(candidate))) {
@@ -232,7 +240,6 @@ public class Main{
                     log("Resolved @rpath for " + candidate);
                 }
             }
-        }
 
         log("@rpath analysis for " + path + " complete.");
         return finalPaths.toArray(new String[0]);

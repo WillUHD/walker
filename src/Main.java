@@ -17,28 +17,30 @@ public class Main{
             var scanner = new Scanner(System.in);
             t.print("\nWalker 3 ", Terminal.Text.bold, Terminal.Colors.brightBlue);
             t.print("by willuhd ", Terminal.Text.italic, Terminal.Colors.blue);
-            IO.print("—— Enter the library path ");
-            t.print("(-h for help)", Terminal.Text.dim);
-            IO.println(": ");
-            t.set(Terminal.Text.italic, Terminal.Colors.green);
-            IO.print(">> ");
+            IO.print("—— ");
 
             Path depPath;
             boolean verbose;
             while (true) {
+                IO.print("Enter the library path ");
+                t.print("(-h for help)", Terminal.Text.dim);
+                IO.println(": ");
+                t.set(Terminal.Text.italic, Terminal.Colors.green);
+                IO.print(">> ");
 
                 var s = scanner.nextLine().trim();
                 t.restore();
 
                 if(s.startsWith("--help") || s.startsWith("-h")){
-                    t.print("\n          Walker ", Terminal.Text.italic, Terminal.Colors.blue);
+                    t.print("\n         Walker ", Terminal.Text.italic, Terminal.Colors.blue);
                     t.println("help", Terminal.Text.bold, Terminal.Colors.blue);
-                    t.print("  print this help menu: ", Terminal.Text.dim);
-                    t.println("--help", Terminal.Colors.brightBlue);
-                    t.print("  maximum verbosity: ", Terminal.Text.dim);
-                    t.println("--verbose", Terminal.Colors.brightBlue);
-                    t.print("  shut down Walker: ", Terminal.Text.dim);
-                    t.println("--shutdown\n", Terminal.Colors.brightBlue);
+                    t.print("--help", Terminal.Colors.brightBlue);
+                    t.println(" print this help menu: ", Terminal.Text.dim);
+                    t.print("--verbose", Terminal.Colors.brightBlue);
+                    t.println(" maximum verbosity: ", Terminal.Text.dim);
+                    t.print("--shutdown", Terminal.Colors.brightBlue);
+                    t.println(" shut down Walker\n", Terminal.Text.dim);
+
                     continue;
                 } else if(s.startsWith("--shutdown") || s.startsWith("-s")) System.exit(0);
 

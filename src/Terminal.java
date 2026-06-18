@@ -21,7 +21,7 @@
 public class Terminal {
 
 	/// ### `Colors`
-	/// Standard ANSI color codes as `String`s
+	/// Standard ANSI color codes and macOS system RGB colors as `String`s
 	enum Colors {
 		black("30"),
 		red("31"),
@@ -31,14 +31,36 @@ public class Terminal {
 		magenta("35"),
 		cyan("36"),
 		white("37"),
-		brightBlack("90"), // aka gray
+		brightBlack("90"),
 		brightRed("91"),
 		brightGreen("92"),
 		brightYellow("93"),
 		brightBlue("94"),
 		brightMagenta("95"),
 		brightCyan("96"),
-		brightWhite("97");
+		brightWhite("97"),
+
+		// macOS System Colors
+		xRed("38;2;255;59;48"),
+		xOrange("38;2;255;149;0"),
+		xYellow("38;2;255;204;0"),
+		xGreen("38;2;52;199;89"),
+		xMint("38;2;0;199;190"),
+		xTeal("38;2;48;176;199"),
+		xCyan("38;2;50;173;230"),
+		xBlue("38;2;0;122;255"),
+		xIndigo("38;2;88;86;214"),
+		xPurple("38;2;175;82;222"),
+		xPink("38;2;255;45;85"),
+		xBrown("38;2;162;132;94"),
+
+		// macOS System Grays
+		gray("38;2;142;142;147"),
+		gray2("38;2;174;174;178"),
+		gray3("38;2;199;199;204"),
+		gray4("38;2;209;209;214"),
+		gray5("38;2;229;229;234"),
+		gray6("38;2;242;242;247");
 
 		private final String code;
 		Colors(String code){this.code = code;}
@@ -46,7 +68,7 @@ public class Terminal {
 	}
 
 	/// ### `Background`
-	/// ANSI color codes for background colors as `String`s. Slightly different from `Colors`.
+	/// ANSI and macOS system RGB codes for background colors as `String`s.
 	enum Background {
 		black("40"),
 		red("41"),
@@ -63,7 +85,29 @@ public class Terminal {
 		brightBlue("104"),
 		brightMagenta("105"),
 		brightCyan("106"),
-		brightWhite("107");
+		brightWhite("107"),
+
+		// macOS System Colors
+		xRed("48;2;255;59;48"),
+		xOrange("48;2;255;149;0"),
+		xYellow("48;2;255;204;0"),
+		xGreen("48;2;52;199;89"),
+		xMint("48;2;0;199;190"),
+		xTeal("48;2;48;176;199"),
+		xCyan("48;2;50;173;230"),
+		xBlue("48;2;0;122;255"),
+		xIndigo("48;2;88;86;214"),
+		xPurple("48;2;175;82;222"),
+		xPink("48;2;255;45;85"),
+		xBrown("48;2;162;132;94"),
+
+		// macOS System Grays
+		gray("48;2;142;142;147"),
+		gray2("48;2;174;174;178"),
+		gray3("48;2;199;199;204"),
+		gray4("48;2;209;209;214"),
+		gray5("48;2;229;229;234"),
+		gray6("48;2;242;242;247");
 
 		private final String code;
 		Background(String code){this.code = code;}

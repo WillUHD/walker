@@ -16,7 +16,7 @@ public class Main{
         while(true) {
             var scanner = new Scanner(System.in);
             t.format("\nWalker 3 by willuhd ", Terminal.Text.bold, Terminal.Colors.blue);
-            t.format("--help if needed\n", Terminal.Text.dim, Terminal.Colors.brightBlack);
+            t.format("--help if needed\n", Terminal.Text.dim, Terminal.Colors.gray2);
 
             Path depPath;
             boolean verbose;
@@ -28,12 +28,12 @@ public class Main{
 
                 if(s.startsWith("--help") || s.startsWith("-h")){
                     t.format("\nWalker 3 ", Terminal.Text.italic, Terminal.Colors.blue);
-                    t.format("help\n", Terminal.Text.bold, Terminal.Colors.brightBlack);
-                    t.format("print this help menu: ", Terminal.Text.italic, Terminal.Colors.brightBlack);
+                    t.format("help\n", Terminal.Text.bold, Terminal.Colors.gray);
+                    t.format("print this help menu: ", Terminal.Text.italic, Terminal.Colors.gray);
                     t.format("--help\n", Terminal.Text.bold, Terminal.Colors.blue);
-                    t.format("maximum verbosity: ", Terminal.Text.italic, Terminal.Colors.brightBlack);
+                    t.format("maximum verbosity: ", Terminal.Text.italic, Terminal.Colors.gray);
                     t.format("--verbose\n", Terminal.Text.bold, Terminal.Colors.blue);
-                    t.format("shut down Walker: ", Terminal.Text.italic, Terminal.Colors.brightBlack);
+                    t.format("shut down Walker: ", Terminal.Text.italic, Terminal.Colors.gray);
                     t.format("--shutdown\n\n", Terminal.Text.bold, Terminal.Colors.blue);
                     continue;
                 } else if(s.startsWith("--shutdown") || s.startsWith("-s")) System.exit(0);
@@ -47,7 +47,7 @@ public class Main{
                 depPath = Path.of(s);
 
                 if (!Files.exists(depPath) || !depPath.toString().endsWith(".dylib")) {
-                    IO.println("Path verification failed. --help for help. ");
+                    t.error("Path is invalid");
                     continue;
                 } break;
             }
@@ -62,7 +62,7 @@ public class Main{
 
             try { Files.createDirectories(srcPath); }
             catch (IOException e) {
-                System.err.println("Can't create the target folder, make sure the file system is writable.");
+                t.error("Can't create the target folder, make sure the file system is writable.");
                 System.exit(1);
             }
 
@@ -84,7 +84,7 @@ public class Main{
                 IO.println("Patching completed. Reverifying: ");
                 try (var stream = Files.list(srcPath)) {
                     stream.forEach(bin -> IO.println(send("otool -L \"" + bin + "\"")));
-                } catch (IOException e) { System.err.println(Arrays.toString(e.getStackTrace())); }
+                } catch (IOException e) { t.error(Arrays.toString(e.getStackTrace())); }
             } else IO.println("\rPatching completed.");
 
             var endTime = System.nanoTime();
@@ -113,7 +113,7 @@ public class Main{
 
     static synchronized void log(String msg) {
         if (logging) IO.println(msg);
-        else IO.print(("\r" + msg + "\033[K").translateEscapes());
+        else IO.print(("\033[7l\r" + msg + "\033[K").translateEscapes());
     }
 
     static String send(String line) {
@@ -126,7 +126,7 @@ public class Main{
             String output;
             while ((output = reader.readLine()) != null) sb.append(output).append('\n');
             p.waitFor();
-        } catch (IOException | InterruptedException e) {System.err.println(Arrays.toString(e.getStackTrace()));}
+        } catch (IOException | InterruptedException e) {t.error(Arrays.toString(e.getStackTrace()));}
         return sb.toString().trim();
     }
 
@@ -144,7 +144,7 @@ public class Main{
         try {
             Files.copy(current, copiedPath, StandardCopyOption.REPLACE_EXISTING);
         } catch (IOException e) {
-            System.err.println(Arrays.toString(e.getStackTrace()));
+            t.error(Arrays.toString(e.getStackTrace()));
         }
 
         // set the library ID inside the copied binary

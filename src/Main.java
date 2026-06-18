@@ -292,15 +292,22 @@ public class Main {
         isScanning.set(true);
         cancelScan.set(false);
         stateNodes.clear();
-        currentRootPath = rootPath;
+
+        String resolvedPath = rootPath;
+        if (resolvedPath.equals("~")) {
+            resolvedPath = System.getProperty("user.home");
+        } else if (resolvedPath.startsWith("~/")) {
+            resolvedPath = System.getProperty("user.home") + resolvedPath.substring(1);
+        }
+        Path targetPathObj = Path.of(resolvedPath).toAbsolutePath().normalize();
+        currentRootPath = targetPathObj.toString();
 
         Thread.startVirtualThread(() -> {
             try {
-                var p = Path.of(rootPath).toAbsolutePath();
-                if (Files.exists(p)) {
+                if (Files.exists(targetPathObj)) {
                     try (var executor = Executors.newVirtualThreadPerTaskExecutor()) {
                         var phaser = new Phaser(1);
-                        submitScan(p.toString(), new HashSet<>(), executor, phaser);
+                        submitScan(currentRootPath, new HashSet<>(), executor, phaser);
                         phaser.arriveAndAwaitAdvance();
                     }
                     calculateIncomingEdges();
@@ -330,7 +337,6 @@ public class Main {
     static void submitScan(String absPath, Set<String> accumulatedRpaths, ExecutorService executor, Phaser phaser) {
         if (cancelScan.get()) return;
 
-        // Pre-reserve node slots to prevent duplicate scans
         var placeholder = new DepNode();
         placeholder.id = absPath;
         placeholder.absolutePath = absPath;
@@ -495,8 +501,20 @@ public class Main {
                     serveHtml(ex);
                 } else if (path.equals("/dylib.png") && method.equals("GET")) {
                     serveIcon(ex);
+                } else if (path.equals("/folder.png") && method.equals("GET")) {
+                    serveFolderIcon(ex);
                 } else if (path.equals("/api/discover") && method.equals("POST")) {
-                    var reqPath = new String(ex.getRequestBody().readAllBytes(), StandardCharsets.UTF_8).trim();
+                    var bodyStr = new String(ex.getRequestBody().readAllBytes(), StandardCharsets.UTF_8).trim();
+                    String reqPath = "";
+                    try {
+                        @SuppressWarnings("unchecked")
+                        var parsed = (Map<String, Object>) new JSONParser(bodyStr).parse();
+                        if (parsed != null && parsed.get("path") != null) {
+                            reqPath = parsed.get("path").toString();
+                        }
+                    } catch (Exception e) {
+                        reqPath = bodyStr;
+                    }
                     startDiscovery(reqPath);
                     sendJSON(ex, 200, Map.of("status", "started"));
                 } else if (path.equals("/api/status") && method.equals("GET")) {
@@ -557,6 +575,21 @@ public class Main {
             }
         }
 
+        private void serveFolderIcon(HttpExchange ex) throws IOException {
+            try (var is = Main.class.getResourceAsStream("/folder.png")) {
+                if (is != null) {
+                    byte[] b = is.readAllBytes();
+                    ex.getResponseHeaders().set("Content-Type", "image/png");
+                    ex.sendResponseHeaders(200, b.length);
+                    ex.getResponseBody().write(b);
+                } else {
+                    ex.sendResponseHeaders(404, -1);
+                }
+            } finally {
+                ex.getResponseBody().close();
+            }
+        }
+
         private void handleFileSystemList(HttpExchange ex) throws IOException {
             var query = ex.getRequestURI().getQuery();
             var pathParam = "";
@@ -567,6 +600,10 @@ public class Main {
 
             var p = pathParam.isEmpty() ? Path.of(System.getProperty("user.home")) : Path.of(pathParam);
             if (!Files.exists(p)) p = Path.of("/");
+            if (Files.isRegularFile(p)) {
+                p = p.getParent();
+                if (p == null) p = Path.of("/");
+            }
 
             var response = new LinkedHashMap<String, Object>();
             response.put("currentPath", p.toAbsolutePath().toString());

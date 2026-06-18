@@ -23,9 +23,14 @@
         }
         body { margin: 0; padding: 0; font-family: -apple-system, sans-serif; background: var(--bg); color: var(--text); display: flex; flex-direction: column; height: 100vh; overflow: hidden; }
         body.resizing * { user-select: none !important; -webkit-user-select: none !important; }
+        body.resizing .column-container { transition: none !important; }
 
         /* Top Bar */
         .top-bar { display: flex; padding: 12px 16px; background: var(--head); border-bottom: 1px solid var(--border); align-items: center; gap: 10px; flex-shrink: 0; }
+        .header-brand { display: flex; align-items: baseline; gap: 6px; margin-right: 12px; }
+        .brand-title { font-weight: 700; font-size: 16px; letter-spacing: -0.5px; color: var(--text); }
+        .brand-subtitle { font-size: 11px; color: var(--dim); font-style: italic; text-decoration: none; transition: color 0.15s; }
+        .brand-subtitle:hover { color: var(--blue); text-decoration: underline; }
         .top-bar input { flex: 1; padding: 6px 10px; border-radius: 6px; border: 1px solid var(--border); background: var(--win); color: var(--text); outline: none; }
         button { background: var(--btn); border: 1px solid var(--btn-border); color: var(--text); padding: 5px 12px; border-radius: 6px; cursor: pointer; font-size: 13px; font-weight: 500; }
         button:disabled { opacity: 0.5; cursor: not-allowed; }
@@ -39,8 +44,25 @@
         .browser { flex: 1; display: flex; overflow-x: auto; overflow-y: hidden; background: var(--win); position: relative; outline: none; }
         .browser.disabled { pointer-events: none; opacity: 0.55; }
 
-        /* Column layout with resizer */
-        .column-container { display: flex; height: 100%; position: relative; flex-shrink: 0; box-sizing: border-box; }
+        /* Column layout with resizer and smooth transitions */
+        .column-container {
+            display: flex;
+            height: 100%;
+            position: relative;
+            flex-shrink: 0;
+            box-sizing: border-box;
+            border-right: 1px solid var(--border);
+            width: 250px;
+            opacity: 1;
+            transition: width 0.22s cubic-bezier(0.4, 0.0, 0.2, 1), opacity 0.22s ease;
+            overflow: hidden;
+        }
+        .column-container.removing {
+            width: 0px !important;
+            opacity: 0 !important;
+            pointer-events: none !important;
+            border-right: none !important;
+        }
         .column { width: 100%; overflow-y: auto; overflow-x: hidden; padding: 4px 0; position: relative; min-height: 100%; }
         .resize-handle { width: 4px; background: transparent; cursor: col-resize; position: relative; height: 100%; z-index: 10; transition: background 0.1s; border-right: 1px solid var(--border); }
         .resize-handle:hover { background: var(--blue); }
@@ -106,7 +128,8 @@
         /* Multi-Column File Browser Modal */
         .fb-modal { width: 800px; max-height: 80vh; display: flex; flex-direction: column; background: var(--win); border-radius: 10px; border: 1px solid var(--border); box-shadow: 0 10px 30px rgba(0,0,0,0.3); overflow: hidden; }
         .fb-header { display: flex; padding: 12px 16px; background: var(--head); border-bottom: 1px solid var(--border); align-items: center; gap: 8px; }
-        .fb-search { width: 180px; margin-left: auto; padding: 4px 8px; border-radius: 4px; border: 1px solid var(--border); background: var(--bg); color: var(--text); outline: none; }
+        .fb-address-container { display: flex; gap: 6px; flex: 1; max-width: 500px; margin-left: auto; align-items: center; }
+        .fb-address { flex: 1; padding: 4px 8px; border-radius: 4px; border: 1px solid var(--border); background: var(--win); color: var(--text); outline: none; font-size: 12px; }
         .fb-body { display: flex; flex-direction: row; height: 350px; overflow-x: auto; overflow-y: hidden; background: var(--win); position: relative; }
         .fb-body .column-container { border-right: 1px solid var(--border); }
         .fb-footer { display: flex; justify-content: flex-end; padding: 12px 16px; background: var(--head); border-top: 1px solid var(--border); gap: 10px; }
@@ -118,8 +141,12 @@
 <body>
 
 <div class="top-bar" id="top-bar">
+    <div class="header-brand">
+        <span class="brand-title">Walker 3.1</span>
+        <a class="brand-subtitle" href="https://github.com/willuhd/walker" target="_blank">by willuhd</a>
+    </div>
     <label style="font-weight:600;">Target:</label>
-    <input type="text" id="target-in" placeholder="Select a library or executable..." readonly />
+    <input type="text" id="target-in" placeholder="Enter path or browse to a library or executable..." />
     <button id="browse-btn">Browse...</button>
     <button id="resolve-btn" class="primary" disabled>Resolve</button>
 
@@ -190,8 +217,11 @@
 <div class="overlay" id="fb-overlay">
     <div class="fb-modal">
         <div class="fb-header">
-            <span id="fb-title" style="font-weight:600; font-size:14px;">Select File</span>
-            <input type="text" id="fb-search" class="fb-search" placeholder="Search..." />
+            <span id="fb-title" style="font-weight:600; font-size:14px; flex-shrink: 0;">Select File</span>
+            <div class="fb-address-container">
+                <input type="text" id="fb-address" class="fb-address" placeholder="Enter system directory path..." />
+                <button id="fb-go-btn" class="primary" style="padding: 4px 12px; font-size: 12px;">Go</button>
+            </div>
         </div>
         <div class="fb-body" id="fb-browser"></div>
         <div class="fb-footer">
@@ -256,9 +286,12 @@
             <label>Select Parent's @rpath:</label>
             <select id="ref-parent-rpath-sel"></select>
         </div>
-        <div class="modal-row">
-            <label>Reference Subpath:</label>
-            <input type="text" id="ref-subpath" placeholder="e.g., av/libavformat.dylib" />
+        <div class="modal-row" id="row-ref-subpath">
+            <label id="ref-subpath-label">Reference Subpath:</label>
+            <div style="display:flex; gap:8px; align-items:center; margin-top:6px;">
+                <input type="text" id="ref-subpath" placeholder="e.g., av/libavformat.dylib" style="margin-top:0; flex:1;" />
+                <button id="ref-subpath-browse" style="display:none; flex-shrink:0; padding:6px 12px;">Browse...</button>
+            </div>
         </div>
         <div class="modal-row">
             <label>Local Filesystem Operation:</label>
@@ -286,6 +319,7 @@
     let activeRpathIndex = -1;
     let showSystemLibs = false;
     let pollTimer = null;
+    let pruneTimeout = null;
 
     let conflictOpCache = null;
     let nudgeOpCache = null;
@@ -332,7 +366,9 @@
     }
 
     function makeItemInner(name, isDir, hasArrow, fallbackChar = '📄', hoverTitle = '') {
-        const iconHtml = isDir ? '📁' : `<span class="icon-container"><img class="item-icon" src="/dylib.png" onerror="this.outerHTML='${fallbackChar}'" /></span>`;
+        const iconHtml = isDir
+            ? `<span class="icon-container"><img class="item-icon" src="/folder.png" onerror="this.outerHTML='📁'" /></span>`
+            : `<span class="icon-container"><img class="item-icon" src="/dylib.png" onerror="this.outerHTML='${fallbackChar}'" /></span>`;
         const title = hoverTitle || name;
         return `
             <div class="item-left">
@@ -343,10 +379,19 @@
         `;
     }
 
+    // Toggle Resolve Button state based on manual input string presence
+    EL('target-in').addEventListener('input', () => {
+        EL('resolve-btn').disabled = EL('target-in').value.trim() === "";
+    });
+
     EL('resolve-btn').addEventListener('click', () => {
         const btn = EL('resolve-btn');
         if (btn.innerText === "Resolve") {
-            fetch('/api/discover', { method: 'POST', body: JSON.stringify({path: EL('target-in').value}) });
+            fetch('/api/discover', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({path: EL('target-in').value.trim()})
+            });
             btn.innerText = "Cancel"; EL('browse-btn').disabled = true;
             EL('browser').classList.add('disabled');
             pendingOps = []; updateApplyBtn(); startPolling();
@@ -408,19 +453,75 @@
         EL('fb-overlay').classList.add('active');
         fbSelectedPath = "";
         EL('fb-select').disabled = true;
-        EL('fb-search').value = "";
         fbSelPath = [];
+
+        // Determine first parent folder from target to avoid empty directories
+        let initialPath = state.root || "/";
+        if (initialPath.endsWith(".dylib") || initialPath.endsWith(".framework") || initialPath.includes(".")) {
+            initialPath = initialPath.substring(0, initialPath.lastIndexOf("/")) || "/";
+        }
 
         return new Promise((resolve) => {
             fbResolveCallback = resolve;
-            navigateFbCol(0, state.root || "/");
+            loadPathAncestry(initialPath);
         });
     }
+
+    // Load full system folder hierarchy columns to target directory
+    async function loadPathAncestry(targetPath) {
+        let path = targetPath.trim();
+        if (!path) return;
+
+        if (path === "~") path = "/";
+
+        try {
+            const res = await fetch(`/api/fs-list?path=${encodeURIComponent(path)}`);
+            const data = await res.json();
+            const resolvedPath = data.currentPath;
+            EL('fb-address').value = resolvedPath;
+
+            const segments = [];
+            let parts = resolvedPath.split('/').filter(Boolean);
+
+            segments.push('/');
+            let current = '';
+            for (let i = 0; i < parts.length; i++) {
+                current += '/' + parts[i];
+                segments.push(current);
+            }
+
+            fbSelPath = [];
+            const promises = segments.map(segPath =>
+                fetch(`/api/fs-list?path=${encodeURIComponent(segPath)}`).then(r => r.json())
+            );
+
+            const results = await Promise.all(promises);
+            fbSelPath = results.map(r => ({ path: r.currentPath, files: r.files }));
+            fbSelectedPath = resolvedPath;
+
+            renderFbColumns();
+            EL('fb-select').disabled = fbSelectFolderMode ? false : true;
+
+        } catch (err) {
+            console.error("Failed to list folder ancestry: ", err);
+        }
+    }
+
+    EL('fb-go-btn').onclick = () => {
+        loadPathAncestry(EL('fb-address').value);
+    };
+
+    EL('fb-address').onkeydown = (e) => {
+        if (e.key === 'Enter') {
+            loadPathAncestry(EL('fb-address').value);
+        }
+    };
 
     function navigateFbCol(level, dirPath) {
         fetch(`/api/fs-list?path=${encodeURIComponent(dirPath)}`)
             .then(r=>r.json())
             .then(data => {
+                EL('fb-address').value = data.currentPath;
                 fbSelPath = fbSelPath.slice(0, level);
                 fbSelPath.push({ path: data.currentPath, files: data.files });
                 renderFbColumns();
@@ -429,22 +530,20 @@
 
     function renderFbColumns() {
         const browser = EL('fb-browser');
-        // Cache current vertical scrolls of directories to prevent jumps
         const scrollPositions = Array.from(browser.querySelectorAll('.column')).map(c => c.scrollTop);
 
         browser.innerHTML = "";
-        const query = EL('fb-search').value.toLowerCase().trim();
 
         fbSelPath.forEach((colData, level) => {
             const { container, col } = createColumn('220px', () => {
                 fbSelPath = fbSelPath.slice(0, level);
                 fbSelectedPath = level > 0 ? fbSelPath[level - 1].path : "";
+                EL('fb-address').value = fbSelectedPath;
                 EL('fb-select').disabled = true;
                 renderFbColumns();
             });
 
-            const filtered = colData.files.filter(f => f.name.toLowerCase().includes(query));
-            filtered.sort((a,b) => b.isDir - a.isDir || a.name.localeCompare(b.name)).forEach(f => {
+            colData.files.sort((a,b) => b.isDir - a.isDir || a.name.localeCompare(b.name)).forEach(f => {
                 const div = document.createElement('div');
                 const isSelected = (fbSelectedPath === f.absPath) || (fbSelPath[level + 1] && fbSelPath[level + 1].path === f.absPath);
 
@@ -453,6 +552,7 @@
 
                 div.onclick = () => {
                     fbSelectedPath = f.absPath;
+                    EL('fb-address').value = f.absPath;
                     if (f.isDir) {
                         navigateFbCol(level + 1, f.absPath);
                     } else {
@@ -468,7 +568,6 @@
             container.appendChild(col);
             browser.appendChild(container);
 
-            // Restore scroll positions cleanly
             if (scrollPositions[level] !== undefined) {
                 col.scrollTop = scrollPositions[level];
             }
@@ -477,7 +576,6 @@
         alignViewport(browser, fbSelPath.length - 1);
     }
 
-    EL('fb-search').oninput = () => renderFbColumns();
     EL('fb-cancel').onclick = () => { fbResolveCallback(null); closeFileBrowser(); };
     EL('fb-select').onclick = () => { fbResolveCallback(fbSelectedPath); closeFileBrowser(); };
 
@@ -513,7 +611,7 @@
 
         const activeLevel = selPath.length - 1;
         const activeId = selPath[activeLevel];
-        const colContainers = Array.from(EL('browser').querySelectorAll('.column-container'));
+        const colContainers = Array.from(EL('browser').querySelectorAll('.column-container:not(.removing)'));
         const activeColContainer = colContainers[activeLevel];
         if (!activeColContainer) return;
 
@@ -559,12 +657,14 @@
 
     function renderAndAlignColumn(targetLevel) {
         render();
-        alignViewport(EL('browser'), targetLevel);
+        setTimeout(() => {
+            alignViewport(EL('browser'), targetLevel);
+        }, 30);
     }
 
     // Unified Fluid Horizontal Viewport Alignments (Both Directions)
     function alignViewport(container, targetLevel) {
-        const cols = Array.from(container.querySelectorAll('.column-container'));
+        const cols = Array.from(container.querySelectorAll('.column-container:not(.removing)'));
         if (!cols[targetLevel]) return;
 
         const targetCol = cols[targetLevel];
@@ -573,50 +673,102 @@
         const viewportWidth = container.clientWidth;
         const currentScroll = container.scrollLeft;
 
-        // Auto Scroll Forward (Rightward)
+        let targetScroll = currentScroll;
+
         if (colLeft + colWidth > currentScroll + viewportWidth) {
-            container.scrollTo({ left: colLeft + colWidth - viewportWidth + 40, behavior: 'smooth' });
+            targetScroll = colLeft + colWidth - viewportWidth + 40;
         }
-        // Auto Scroll Backward (Leftward)
         else if (colLeft < currentScroll) {
-            container.scrollTo({ left: Math.max(0, colLeft - 40), behavior: 'smooth' });
+            targetScroll = Math.max(0, colLeft - 40);
+        }
+
+        const nextCol = cols[targetLevel + 1];
+        if (nextCol) {
+            const nextLeft = nextCol.offsetLeft;
+            const nextWidth = nextCol.offsetWidth;
+            if (nextLeft + nextWidth > currentScroll + viewportWidth) {
+                targetScroll = nextLeft + nextWidth - viewportWidth + 40;
+            }
+        }
+
+        if (Math.abs(targetScroll - currentScroll) > 1) {
+            container.scrollTo({ left: targetScroll, behavior: 'smooth' });
         }
     }
 
-    // --- Core Finder Views ---
+    // --- Core Finder Views (Reconciled DOM Rendering to Eliminate Collapse Jitter) ---
     function render() {
         const b = EL('browser');
-        const currentScrollLeft = b.scrollLeft; // Retain active scroll state to prevent left-jumps
-        const previousScrollWidth = b.scrollWidth;
-
-        const scrolls = Array.from(b.querySelectorAll('.column')).map(c => c.scrollTop);
-        const widths = Array.from(b.querySelectorAll('.column-container')).map(c => c.style.width);
-
-        b.innerHTML = "";
-        if (!state.root || !state.nodes[state.root]) return;
-
-        renderCol(0, [state.root], scrolls, widths);
-
-        // Apply temporary scroll width spacer to enable smooth backward scrolling animations
-        if (b.scrollWidth < previousScrollWidth) {
-            const spacer = document.createElement('div');
-            spacer.id = 'scroll-spacer';
-            spacer.style.width = (previousScrollWidth - b.scrollWidth) + 'px';
-            spacer.style.flexShrink = '0';
-            b.appendChild(spacer);
+        if (!state.root || !state.nodes[state.root]) {
+            b.innerHTML = "";
+            return;
         }
 
-        b.scrollLeft = currentScrollLeft; // Restore scroll state right before frame redraw
+        let columnsToRender = [];
+        columnsToRender.push({ level: 0, parentId: null, ids: [state.root] });
 
+        for (let i = 0; i < selPath.length; i++) {
+            const selId = selPath[i];
+            const node = state.nodes[selId];
+            if (node) {
+                const children = Object.keys(node.children);
+                if (children.length > 0) {
+                    columnsToRender.push({ level: i + 1, parentId: selId, ids: children });
+                }
+            }
+        }
+
+        const existingCols = Array.from(b.querySelectorAll('.column-container:not(.removing)'));
+
+        // Mark expiring columns with collapsing class
+        const allCols = Array.from(b.querySelectorAll('.column-container'));
+        allCols.forEach((colEl, idx) => {
+            if (idx >= columnsToRender.length) {
+                colEl.classList.add('removing');
+            }
+        });
+
+        // Reconcile and draw remaining columns in-place
+        columnsToRender.forEach((colInfo, index) => {
+            const existingCol = existingCols[index];
+            const parentNodeId = colInfo.parentId;
+            const ids = colInfo.ids;
+
+            if (existingCol && existingCol.getAttribute('data-parent-id') === String(parentNodeId)) {
+                existingCol.classList.remove('removing');
+                updateColumnItems(existingCol, index, ids);
+            } else {
+                if (existingCol) {
+                    existingCol.classList.add('removing');
+                }
+                const newColContainer = createColumnDOM(index, parentNodeId, ids);
+                const firstRemoving = b.querySelector('.column-container.removing');
+                if (firstRemoving) {
+                    b.insertBefore(newColContainer, firstRemoving);
+                } else {
+                    b.appendChild(newColContainer);
+                }
+            }
+        });
+
+        scheduleColumnPruning();
         renderInspector();
     }
 
-    // Check if node itself has virtual RPath modifications, or incoming virtual reference modifications
+    function scheduleColumnPruning() {
+        if (pruneTimeout) clearTimeout(pruneTimeout);
+        pruneTimeout = setTimeout(() => {
+            const b = EL('browser');
+            const toRemove = b.querySelectorAll('.column-container.removing');
+            toRemove.forEach(el => el.remove());
+        }, 230);
+    }
+
     function isNodeModified(id) {
         return pendingOps.some(op => op.target === id || op.childId === id);
     }
 
-    function renderCol(level, ids, savedScrolls, savedWidths) {
+    function createColumnDOM(level, parentId, ids) {
         const filteredIds = ids.filter(id => {
             const node = state.nodes[id];
             if (!node) return false;
@@ -624,27 +776,26 @@
             return true;
         });
 
-        if (filteredIds.length === 0) return;
-
-        const width = (savedWidths && savedWidths[level]) ? savedWidths[level] : '250px';
-        const { container, col } = createColumn(width, () => {
-            selPath = selPath.slice(0, level);
-            renderAndAlignColumn(level);
-
-            // Sweep trailing spacers after navigation settlements
-            setTimeout(() => {
-                const spacer = EL('scroll-spacer');
-                if (spacer) spacer.remove();
-            }, 350);
+        // Enforce residual space click de-selection logic on columns
+        const { container, col } = createColumn('250px', () => {
+            if (level > 0) {
+                selPath = selPath.slice(0, level);
+                renderAndAlignColumn(level - 1);
+            }
         });
 
+        container.setAttribute('data-parent-id', String(parentId));
+        container.setAttribute('data-level', level);
+
         filteredIds.forEach(id => {
-            const node = state.nodes[id]; if(!node) return;
+            const node = state.nodes[id];
+            if (!node) return;
             const div = document.createElement('div');
             div.setAttribute('data-id', id);
 
             const modified = isNodeModified(id);
-            div.className = 'col-item' + (selPath[level] === id ? ' selected' : '') + (node.isMissing ? ' missing' : '') + (node.isSystem ? ' system' : '') + (modified ? ' modified' : '');
+            const isSelected = selPath[level] === id;
+            div.className = 'col-item' + (isSelected ? ' selected' : '') + (node.isMissing ? ' missing' : '') + (node.isSystem ? ' system' : '') + (modified ? ' modified' : '');
 
             const visibleChildren = Object.keys(node.children).filter(cid => {
                 const child = state.nodes[cid];
@@ -672,18 +823,62 @@
         };
         container.appendChild(handle);
 
-        EL('browser').appendChild(container);
+        return container;
+    }
 
-        if (savedScrolls && savedScrolls[level]) {
-            col.scrollTop = savedScrolls[level];
-        }
+    function updateColumnItems(container, level, ids) {
+        const col = container.querySelector('.column');
+        const savedScrollTop = col.scrollTop;
 
-        const selId = selPath[level];
-        if (selId && state.nodes[selId]) {
-            const children = Object.keys(state.nodes[selId].children);
-            if (children.length > 0 && !selPath.slice(0, level).includes(selId)) {
-                renderCol(level + 1, children, savedScrolls, savedWidths);
-            }
+        const filteredIds = ids.filter(id => {
+            const node = state.nodes[id];
+            if (!node) return false;
+            if (!showSystemLibs && node.isSystem) return false;
+            return true;
+        });
+
+        const existingItems = Array.from(col.querySelectorAll('.col-item'));
+        const existingIds = existingItems.map(item => item.getAttribute('data-id'));
+
+        const idsMatch = JSON.stringify(filteredIds) === JSON.stringify(existingIds);
+
+        if (idsMatch) {
+            existingItems.forEach(item => {
+                const id = item.getAttribute('data-id');
+                const node = state.nodes[id];
+                const isSelected = selPath[level] === id;
+                const modified = isNodeModified(id);
+
+                item.className = 'col-item' + (isSelected ? ' selected' : '') + (node.isMissing ? ' missing' : '') + (node.isSystem ? ' system' : '') + (modified ? ' modified' : '');
+            });
+        } else {
+            col.innerHTML = "";
+            filteredIds.forEach(id => {
+                const node = state.nodes[id];
+                if (!node) return;
+                const div = document.createElement('div');
+                div.setAttribute('data-id', id);
+
+                const modified = isNodeModified(id);
+                const isSelected = selPath[level] === id;
+                div.className = 'col-item' + (isSelected ? ' selected' : '') + (node.isMissing ? ' missing' : '') + (node.isSystem ? ' system' : '') + (modified ? ' modified' : '');
+
+                const visibleChildren = Object.keys(node.children).filter(cid => {
+                    const child = state.nodes[cid];
+                    return child && (showSystemLibs || !child.isSystem);
+                });
+                const hasChildren = visibleChildren.length > 0;
+
+                div.innerHTML = makeItemInner(node.fileName, false, hasChildren, '📁', id);
+
+                div.onclick = () => {
+                    selPath = selPath.slice(0, level);
+                    selPath.push(id);
+                    renderAndAlignColumn(level);
+                };
+                col.appendChild(div);
+            });
+            col.scrollTop = savedScrollTop;
         }
     }
 
@@ -712,7 +907,6 @@
         EL('insp-arch').innerText = node.isMissing ? "Unresolved Dependency" : (node.architecture || "Unknown Arch");
         EL('insp-path').innerText = node.absolutePath || "Not found on disk";
 
-        // Programmatic element creation for fallback images eliminates parser clashing
         const headerIcon = EL('insp-header-icon');
         headerIcon.innerHTML = "";
         const img = document.createElement('img');
@@ -731,7 +925,6 @@
             EL('insp-flags').appendChild(p);
         });
 
-        // Pending Modifications Preview Block
         const fileOps = pendingOps.filter(op => op.target === id || op.childId === id);
         if (fileOps.length > 0) {
             EL('sec-mods').style.display = 'block';
@@ -753,7 +946,6 @@
             EL('sec-mods').style.display = 'none';
         }
 
-        // Parent Connection
         if (parentId && state.nodes[parentId]) {
             EL('sec-conn').style.display = 'block';
             const edge = state.nodes[parentId].children[id];
@@ -763,7 +955,6 @@
             EL('sec-conn').style.display = 'none';
         }
 
-        // RPaths
         EL('rpath-list').innerHTML = '';
         const vRpaths = getVirtualRpaths(id);
         if (activeRpathIndex >= vRpaths.length) activeRpathIndex = -1;
@@ -795,7 +986,6 @@
         }
     }
 
-    // Consolidated virtual state helpers
     function queueVirtualOp(newOp) {
         if (newOp.type === 'delete_rpath') {
             const idx = pendingOps.findIndex(o => o.type === 'add_rpath' && o.target === newOp.target && o.val === newOp.val);
@@ -812,20 +1002,18 @@
         pendingOps.push(newOp);
     }
 
-    // Discard / Cancel all virtual Changes
     EL('discard-btn').onclick = () => {
         pendingOps = [];
         updateApplyBtn();
         render();
     };
 
-    // RPath Handlers
     EL('rp-add').onclick = () => {
         openFileBrowser(true).then(folder => {
             if (folder) {
                 queueVirtualOp({type:'add_rpath', target: selPath[selPath.length-1], val: folder});
                 updateApplyBtn();
-                render(); // Full render instantly updates modification highlight
+                render();
             }
         });
     };
@@ -848,7 +1036,6 @@
     EL('rp-ren').onclick = () => handleRenameRefactor('rename_rpath');
     EL('rp-ref').onclick = () => handleRenameRefactor('refactor_rpath');
 
-    // Advanced Dependency Reference Changing flow
     let activeRefOld = "";
     let activeRefParentId = "";
     let activeRefChildId = "";
@@ -864,7 +1051,6 @@
         EL('ref-file-action').value = "none";
         EL('ref-type').value = "@rpath";
 
-        // Populate parent rpaths dropdown
         const parentRpaths = getVirtualRpaths(activeRefParentId).filter(r=>r.state!=='deleted');
         const rpSel = EL('ref-parent-rpath-sel'); rpSel.innerHTML = "";
         parentRpaths.forEach(rp => {
@@ -872,16 +1058,45 @@
             rpSel.appendChild(opt);
         });
 
+        EL('row-ref-dropdown').style.display = 'block';
+        EL('ref-subpath-browse').style.display = 'none';
+        EL('ref-subpath-label').innerText = "Reference Subpath:";
+        EL('ref-subpath').placeholder = "e.g., av/libavformat.dylib";
+
         updateRefPreview();
         EL('ref-modal').classList.add('active');
     };
 
     EL('ref-type').onchange = () => {
-        EL('row-ref-dropdown').style.display = EL('ref-type').value === '@rpath' ? 'block' : 'none';
+        const isRpath = EL('ref-type').value === '@rpath';
+        const isAbsolute = EL('ref-type').value === 'absolute';
+
+        EL('row-ref-dropdown').style.display = isRpath ? 'block' : 'none';
+        EL('ref-subpath-browse').style.display = isAbsolute ? 'block' : 'none';
+
+        if (isAbsolute) {
+            EL('ref-subpath-label').innerText = "Absolute Destination Path:";
+            EL('ref-subpath').placeholder = "e.g., /usr/local/lib/libavformat.dylib";
+        } else {
+            EL('ref-subpath-label').innerText = "Reference Subpath:";
+            EL('ref-subpath').placeholder = "e.g., av/libavformat.dylib";
+        }
+
         updateRefPreview();
     };
     EL('ref-parent-rpath-sel').onchange = updateRefPreview;
     EL('ref-subpath').oninput = updateRefPreview;
+
+    EL('ref-subpath-browse').onclick = () => {
+        EL('ref-modal').classList.remove('active');
+        openFileBrowser(false).then(file => {
+            EL('ref-modal').classList.add('active');
+            if (file) {
+                EL('ref-subpath').value = file;
+                updateRefPreview();
+            }
+        });
+    };
 
     function updateRefPreview() {
         const type = EL('ref-type').value;
@@ -943,10 +1158,9 @@
 
         EL('ref-modal').classList.remove('active');
         updateApplyBtn();
-        render(); // Repaint selection and active paths immediately
+        render();
     };
 
-    // --- Patch Apply Engine ---
     EL('apply-btn').onclick = () => sendBatch();
 
     function sendBatch() {

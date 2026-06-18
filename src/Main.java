@@ -100,23 +100,19 @@ public final class Main {
             toCopy.add(depPath);
             int count = 0;
 
-            if(verbose){
-                while (!toCopy.isEmpty()) {
-                    var current = toCopy.poll();
-                    Walker.otool(current.toString());
-                    count++;
-                }
+            Walker.logging = verbose;
+            while (!toCopy.isEmpty()) {
+                var current = toCopy.poll();
+                Walker.otool(current.toString());
+                count++;
+            }
 
+            if(verbose){
                 System.out.println("Patching completed. Reverifying: ");
                 try (var stream = Files.list(srcPath)) {
                     stream.forEach(bin -> System.out.println(send("otool -L \"" + bin.toString() + "\"")));
                 } catch (IOException e) {System.err.println(Arrays.toString(e.getStackTrace()));}
             } else {
-                while (!toCopy.isEmpty()) {
-                    var current = toCopy.poll();
-                    SilentWalker.otool(current.toString());
-                    count++;
-                }
                 System.out.println("Patching completed.");
             }
 

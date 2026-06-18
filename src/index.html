@@ -1,0 +1,1014 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Walker 3.1</title>
+    <style>
+        :root {
+            --bg: #ececec; --win: #fff; --text: #1e1e1e; --dim: #8a8a8f;
+            --border: #d1d1d6; --blue: #007aff; --red: #ff3b30; --green: #34c759;
+            --btn: #f2f2f7; --btn-border: #c7c7cc; --head: #f5f5f7;
+            --purple: #a05aff; --purple-light: rgba(160, 90, 255, 0.12);
+        }
+        @media (prefers-color-scheme: dark) {
+            :root {
+                --bg: #121212; /* Deep midnight charcoal background */
+                --win: #1a1a1a; /* Rich surface boxes */
+                --text: #f5f5f7; --dim: #8e8e93;
+                --border: #2c2c2e; /* Soft graphite boundaries */
+                --blue: #0a84ff; --red: #ff453a; --green: #30d158;
+                --btn: #2c2c2e; --btn-border: #3e3e42; --head: #1c1c1e; /* Sleek dark headers */
+                --purple: #bf80ff; --purple-light: rgba(191, 128, 255, 0.15);
+            }
+        }
+        body { margin: 0; padding: 0; font-family: -apple-system, sans-serif; background: var(--bg); color: var(--text); display: flex; flex-direction: column; height: 100vh; overflow: hidden; }
+        body.resizing * { user-select: none !important; -webkit-user-select: none !important; }
+
+        /* Top Bar */
+        .top-bar { display: flex; padding: 12px 16px; background: var(--head); border-bottom: 1px solid var(--border); align-items: center; gap: 10px; flex-shrink: 0; }
+        .top-bar input { flex: 1; padding: 6px 10px; border-radius: 6px; border: 1px solid var(--border); background: var(--win); color: var(--text); outline: none; }
+        button { background: var(--btn); border: 1px solid var(--btn-border); color: var(--text); padding: 5px 12px; border-radius: 6px; cursor: pointer; font-size: 13px; font-weight: 500; }
+        button:disabled { opacity: 0.5; cursor: not-allowed; }
+        button.primary { background: var(--blue); color: #fff; border-color: transparent; }
+        button.purple-btn { background: var(--purple); color: #win; border-color: transparent; color: #fff; }
+
+        /* Main Layout */
+        .main { display: flex; flex: 1; overflow: hidden; }
+
+        /* Finder Columns Container */
+        .browser { flex: 1; display: flex; overflow-x: auto; overflow-y: hidden; background: var(--win); position: relative; outline: none; }
+        .browser.disabled { pointer-events: none; opacity: 0.55; }
+
+        /* Column layout with resizer */
+        .column-container { display: flex; height: 100%; position: relative; flex-shrink: 0; box-sizing: border-box; }
+        .column { width: 100%; overflow-y: auto; overflow-x: hidden; padding: 4px 0; position: relative; min-height: 100%; }
+        .resize-handle { width: 4px; background: transparent; cursor: col-resize; position: relative; height: 100%; z-index: 10; transition: background 0.1s; border-right: 1px solid var(--border); }
+        .resize-handle:hover { background: var(--blue); }
+
+        /* Items */
+        .col-item { display: flex; align-items: center; justify-content: space-between; padding: 6px 10px; margin: 0 6px; border-radius: 4px; cursor: pointer; font-size: 13px; user-select: none; }
+        .col-item:hover { background: rgba(0,0,0,0.05); }
+        @media(prefers-color-scheme: dark) { .col-item:hover { background: rgba(255,255,255,0.05); } }
+        .col-item.selected { background: var(--blue) !important; color: #fff !important; }
+        .col-item.missing { color: var(--red); }
+        .col-item.system { opacity: 0.6; }
+
+        /* Virtual / Modified State */
+        .col-item.modified { background: var(--purple-light); color: var(--purple); }
+        .col-item.selected.modified { background: var(--purple) !important; color: #fff !important; }
+
+        .item-left { display: flex; align-items: center; gap: 8px; overflow: hidden; }
+
+        /* Stable Image/Fallback Dimension Anchors to eliminate Jitter */
+        .icon-container { width: 16px; height: 16px; display: inline-flex; align-items: center; justify-content: center; flex-shrink: 0; overflow: hidden; }
+        .item-icon { width: 16px; height: 16px; object-fit: contain; display: block; }
+        .item-name { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+        /* Inspector Pane */
+        .inspector { width: 340px; background: var(--head); border-left: 1px solid var(--border); display: flex; flex-direction: column; overflow-y: auto; flex-shrink: 0; }
+        .insp-header { padding: 20px; text-align: center; border-bottom: 1px solid var(--border); }
+        .insp-header h3 { margin: 0; font-size: 15px; word-break: break-all; }
+        .insp-header p { margin: 4px 0 0; font-size: 11px; color: var(--dim); }
+
+        .insp-section { padding: 12px 16px; border-bottom: 1px solid var(--border); font-size: 12px; }
+        .insp-section h4 { margin: 0 0 10px; font-size: 13px; font-weight: 600; color: var(--text); text-transform: none; }
+
+        /* Pending Purple Section */
+        .insp-section.pending-section { background: var(--purple-light); border-bottom: 1px solid rgba(160, 90, 255, 0.25); }
+        .insp-section.pending-section h4 { color: var(--purple); }
+
+        .prop-row { display: flex; flex-direction: column; gap: 4px; margin-bottom: 10px; }
+        .prop-val { font-family: monospace; background: var(--win); padding: 4px 6px; border-radius: 4px; border: 1px solid var(--border); word-break: break-all; }
+
+        .pill-box { display: flex; flex-wrap: wrap; gap: 6px; }
+        .pill { background: var(--btn); border: 1px solid var(--btn-border); padding: 2px 8px; border-radius: 12px; font-size: 10px; }
+
+        /* RPaths List */
+        .list-box { background: var(--win); border: 1px solid var(--border); border-radius: 6px; overflow: hidden; max-height: 150px; overflow-y: auto; margin-bottom: 8px; }
+        .list-item { padding: 6px 10px; cursor: pointer; border-bottom: 1px solid var(--border); }
+        .list-item:last-child { border-bottom: none; }
+        .list-item:hover { background: rgba(0,0,0,0.05); }
+        .list-item.selected { background: var(--blue); color: #fff; }
+        .list-item.deleted { text-decoration: line-through; color: var(--dim); }
+        .list-item.added { color: var(--green); }
+
+        .btn-row { display: flex; gap: 6px; }
+        .btn-row button { flex: 1; }
+
+        /* Modal overlays */
+        .overlay { position: fixed; top:0; left:0; right:0; bottom:0; background: rgba(0,0,0,0.4); display: none; align-items: center; justify-content: center; z-index: 100; }
+        .modal { background: var(--win); border: 1px solid var(--border); border-radius: 10px; padding: 20px; width: 440px; box-shadow: 0 10px 30px rgba(0,0,0,0.3); }
+        .modal h3 { margin: 0 0 15px; font-size: 15px; }
+        .modal-row { margin-bottom: 15px; }
+        .modal select, .modal input { width: 100%; box-sizing: border-box; padding: 6px; border-radius: 4px; border: 1px solid var(--border); background: var(--bg); color: var(--text); margin-top: 6px;}
+        .overlay.active { display: flex; }
+
+        /* Multi-Column File Browser Modal */
+        .fb-modal { width: 800px; max-height: 80vh; display: flex; flex-direction: column; background: var(--win); border-radius: 10px; border: 1px solid var(--border); box-shadow: 0 10px 30px rgba(0,0,0,0.3); overflow: hidden; }
+        .fb-header { display: flex; padding: 12px 16px; background: var(--head); border-bottom: 1px solid var(--border); align-items: center; gap: 8px; }
+        .fb-search { width: 180px; margin-left: auto; padding: 4px 8px; border-radius: 4px; border: 1px solid var(--border); background: var(--bg); color: var(--text); outline: none; }
+        .fb-body { display: flex; flex-direction: row; height: 350px; overflow-x: auto; overflow-y: hidden; background: var(--win); position: relative; }
+        .fb-body .column-container { border-right: 1px solid var(--border); }
+        .fb-footer { display: flex; justify-content: flex-end; padding: 12px 16px; background: var(--head); border-top: 1px solid var(--border); gap: 10px; }
+
+        /* Global UI Lock */
+        .global-lock { pointer-events: none; opacity: 0.6; }
+    </style>
+</head>
+<body>
+
+<div class="top-bar" id="top-bar">
+    <label style="font-weight:600;">Target:</label>
+    <input type="text" id="target-in" placeholder="Select a library or executable..." readonly />
+    <button id="browse-btn">Browse...</button>
+    <button id="resolve-btn" class="primary" disabled>Resolve</button>
+
+    <div style="margin-left:auto; display:flex; gap:8px;">
+        <button id="discard-btn" style="display:none; background:rgba(255,59,48,0.15); border-color:transparent; color:var(--red);">Discard Changes</button>
+        <button id="apply-btn" class="purple-btn" style="display:none;">Apply Patches (0)</button>
+    </div>
+</div>
+
+<div class="main">
+    <div class="browser" id="browser" tabindex="0"></div>
+
+    <div class="inspector" id="inspector" style="display:none;">
+        <div class="insp-header">
+            <div id="insp-header-icon" style="margin-bottom:10px; display:inline-block;"></div>
+            <h3 id="insp-name">libname.dylib</h3>
+            <p id="insp-arch">Architecture</p>
+        </div>
+
+        <!-- Modifications Preview Section -->
+        <div class="insp-section pending-section" id="sec-mods" style="display:none;">
+            <h4>Pending Modifications</h4>
+            <div id="insp-mods-list"></div>
+        </div>
+
+        <div class="insp-section" id="sec-conn" style="display:none;">
+            <h4>Parent Connection</h4>
+            <div class="prop-row">
+                <span>Resolved Mechanism:</span>
+                <div class="prop-val" id="insp-conn-mech"></div>
+            </div>
+            <div class="prop-row">
+                <span>Reference String:</span>
+                <div class="prop-val" id="insp-conn-ref"></div>
+            </div>
+            <button id="fix-dep-btn" class="primary" style="width:100%;">Change Reference...</button>
+        </div>
+
+        <div class="insp-section">
+            <h4>Properties</h4>
+            <div class="prop-row">
+                <span>Absolute Path:</span>
+                <div class="prop-val" id="insp-path"></div>
+            </div>
+            <div class="prop-row" style="flex-direction:row; justify-content:space-between; align-items:center;">
+                <span>Show System Libraries</span>
+                <input type="checkbox" id="toggle-sys" style="width:auto; margin:0;" />
+            </div>
+            <div class="pill-box" id="insp-flags" style="margin-top:10px;"></div>
+        </div>
+
+        <div class="insp-section">
+            <h4>@rpaths</h4>
+            <div class="list-box" id="rpath-list"></div>
+            <div class="btn-row" style="margin-bottom:6px;">
+                <button id="rp-add">Add</button>
+                <button id="rp-del" disabled>Remove</button>
+            </div>
+            <div class="btn-row">
+                <button id="rp-ren" disabled>Rename</button>
+                <button id="rp-ref" disabled>Refactor</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Built-in Column-View File Browser Modal -->
+<div class="overlay" id="fb-overlay">
+    <div class="fb-modal">
+        <div class="fb-header">
+            <span id="fb-title" style="font-weight:600; font-size:14px;">Select File</span>
+            <input type="text" id="fb-search" class="fb-search" placeholder="Search..." />
+        </div>
+        <div class="fb-body" id="fb-browser"></div>
+        <div class="fb-footer">
+            <button id="fb-cancel">Cancel</button>
+            <button id="fb-select" class="primary" disabled>Select</button>
+        </div>
+    </div>
+</div>
+
+<!-- Conflict Modal -->
+<div class="overlay" id="conflict-modal">
+    <div class="modal">
+        <h3>File Conflict Detected</h3>
+        <p id="conflict-text" style="font-size:12px; word-break:break-all;"></p>
+        <div class="modal-row">
+            <label>Resolution Strategy:</label>
+            <select id="conflict-strat">
+                <option value="prompt">Abort (Return to editing)</option>
+                <option value="overwrite">Overwrite existing file</option>
+                <option value="replace">Rename existing to -old</option>
+                <option value="skip">Skip copying this file</option>
+            </select>
+        </div>
+        <div class="btn-row">
+            <button id="conf-cancel">Cancel Patch</button>
+            <button id="conf-retry" class="primary">Retry Apply</button>
+        </div>
+    </div>
+</div>
+
+<!-- Nudge Move Dialog -->
+<div class="overlay" id="nudge-modal">
+    <div class="modal">
+        <h3 style="color:var(--red);">Caution: Shared Binary Relocation</h3>
+        <p id="nudge-text" style="font-size:12px;"></p>
+        <p style="font-size:12px; font-weight:600;">Are you sure you want to move this binary? Moving instead of copying may cause references to break.</p>
+        <div class="btn-row">
+            <button id="nudge-abort">Cancel</button>
+            <button id="nudge-proceed" class="primary">Proceed Anyway</button>
+        </div>
+    </div>
+</div>
+
+<!-- Fix/Change Reference Modal -->
+<div class="overlay" id="ref-modal">
+    <div class="modal" style="width:480px;">
+        <h3>Change Dependency Reference</h3>
+        <div class="modal-row" style="font-size:12px;">
+            <span>Parent:</span>
+            <div class="prop-val" id="ref-parent-name" style="margin-top:4px;">Parent</div>
+        </div>
+        <div class="modal-row">
+            <label>Link Type:</label>
+            <select id="ref-type">
+                <option value="@rpath">@rpath</option>
+                <option value="@loader_path">@loader_path</option>
+                <option value="@executable_path">@executable_path</option>
+                <option value="absolute">Absolute Path</option>
+            </select>
+        </div>
+        <div class="modal-row" id="row-ref-dropdown" style="display:none;">
+            <label>Select Parent's @rpath:</label>
+            <select id="ref-parent-rpath-sel"></select>
+        </div>
+        <div class="modal-row">
+            <label>Reference Subpath:</label>
+            <input type="text" id="ref-subpath" placeholder="e.g., av/libavformat.dylib" />
+        </div>
+        <div class="modal-row">
+            <label>Local Filesystem Operation:</label>
+            <select id="ref-file-action">
+                <option value="none">No Physical File Modification (String patch only)</option>
+                <option value="copy">Copy binary to new destination</option>
+                <option value="move">Move binary to new destination</option>
+            </select>
+        </div>
+        <div class="modal-row" id="ref-preview-row">
+            <span style="font-size:12px;">Target Physical Destination:</span>
+            <div class="prop-val" id="ref-absolute-preview" style="margin-top:4px;">/path</div>
+        </div>
+        <div class="btn-row">
+            <button id="ref-cancel">Cancel</button>
+            <button id="ref-save" class="primary">Queue Patch Change</button>
+        </div>
+    </div>
+</div>
+
+<script>
+    let state = { root: "", nodes: {} };
+    let selPath = [];
+    let pendingOps = [];
+    let activeRpathIndex = -1;
+    let showSystemLibs = false;
+    let pollTimer = null;
+
+    let conflictOpCache = null;
+    let nudgeOpCache = null;
+
+    // Custom File Browser state
+    let fbResolveCallback = null;
+    let fbSelectFolderMode = false;
+    let fbSelectedPath = "";
+    let fbSelPath = []; // Navigation trace of { path, files } columns
+
+    const EL = (id) => document.getElementById(id);
+
+    // Fallback Vector Binary Icon
+    const SVG_GENERIC_DYLIB = `
+        <svg class="item-icon" viewBox="0 0 16 20" fill="none" style="width:48px; height:48px;">
+            <path d="M2 1C1.44 1 1 1.44 1 2V18C1 18.56 1.44 19 2 19H14C14.56 19 15 18.56 15 18V6L10 1H2Z" fill="var(--win)" stroke="currentColor" stroke-width="1.2"/>
+            <path d="M10 1V5.5C10 5.78 10.22 6 10.5 6H15" stroke="currentColor" stroke-width="1.2"/>
+            <circle cx="8" cy="12" r="3" stroke="currentColor" stroke-width="1.2"/>
+        </svg>
+    `;
+
+    // Modern macOS Disclosure Arrow Icon
+    const MAC_DISCLOSURE = `
+        <svg style="width:8px; height:8px; fill:none; stroke:currentColor; stroke-width:2.2; opacity:0.75;" viewBox="0 0 10 10">
+            <path d="M3 1l4 4-4 4"/>
+        </svg>
+    `;
+
+    EL('resolve-btn').addEventListener('click', () => {
+        const btn = EL('resolve-btn');
+        if (btn.innerText === "Resolve") {
+            fetch('/api/discover', { method: 'POST', body: JSON.stringify({path: EL('target-in').value}) });
+            btn.innerText = "Cancel"; EL('browse-btn').disabled = true;
+            EL('browser').classList.add('disabled');
+            pendingOps = []; updateApplyBtn(); startPolling();
+        } else if (btn.innerText === "Cancel") {
+            fetch('/api/clear', {method:'POST'}).then(()=>{
+                btn.innerText = "Resolve";
+                EL('browse-btn').disabled = false;
+                EL('browser').classList.remove('disabled');
+                stopPolling();
+                render();
+            });
+        } else if (btn.innerText === "Clear") {
+            fetch('/api/clear', {method:'POST'}).then(()=>{
+                state = {root:"", nodes:{}}; selPath = []; pendingOps = [];
+                EL('target-in').value = ""; btn.innerText = "Resolve"; btn.disabled=true;
+                EL('browse-btn').disabled = false; EL('inspector').style.display='none';
+                EL('browser').classList.remove('disabled');
+                updateApplyBtn(); render();
+            });
+        }
+    });
+
+    EL('toggle-sys').addEventListener('change', (e) => {
+        showSystemLibs = e.target.checked;
+        render();
+    });
+
+    function startPolling() { if(!pollTimer) pollTimer = setInterval(poll, 500); }
+    function stopPolling() { clearInterval(pollTimer); pollTimer = null; }
+
+    function poll() {
+        fetch('/api/status').then(r=>r.json()).then(d => {
+            state.nodes = d.nodes; state.root = d.rootPath;
+            if (!d.isScanning && d.rootPath) {
+                stopPolling(); EL('resolve-btn').innerText = "Clear";
+                EL('browser').classList.remove('disabled');
+                if (selPath.length === 0 && state.root) selPath = [state.root];
+            } else if (d.isScanning) {
+                EL('resolve-btn').innerText = "Cancel";
+                EL('browser').classList.add('disabled');
+            }
+            render();
+        });
+    }
+
+    // --- Custom Column-View File Browser Implementation ---
+    EL('browse-btn').onclick = () => {
+        openFileBrowser(false).then(file => {
+            if (file) {
+                EL('target-in').value = file;
+                EL('resolve-btn').disabled = false;
+            }
+        });
+    };
+
+    function openFileBrowser(folderMode = false) {
+        fbSelectFolderMode = folderMode;
+        EL('fb-title').innerText = folderMode ? "Select Folder" : "Select File";
+        EL('fb-overlay').classList.add('active');
+        fbSelectedPath = "";
+        EL('fb-select').disabled = true;
+        EL('fb-search').value = "";
+        fbSelPath = [];
+
+        return new Promise((resolve) => {
+            fbResolveCallback = resolve;
+            navigateFbCol(0, state.root || "/");
+        });
+    }
+
+    function navigateFbCol(level, dirPath) {
+        fetch(`/api/fs-list?path=${encodeURIComponent(dirPath)}`)
+            .then(r=>r.json())
+            .then(data => {
+                fbSelPath = fbSelPath.slice(0, level);
+                fbSelPath.push({ path: data.currentPath, files: data.files });
+                renderFbColumns();
+            });
+    }
+
+    function renderFbColumns() {
+        const browser = EL('fb-browser');
+        // Cache current vertical scrolls of directories to prevent jumps
+        const scrollPositions = Array.from(browser.querySelectorAll('.column')).map(c => c.scrollTop);
+
+        browser.innerHTML = "";
+        const query = EL('fb-search').value.toLowerCase().trim();
+
+        fbSelPath.forEach((colData, level) => {
+            const container = document.createElement('div');
+            container.className = 'column-container';
+            container.style.width = '220px';
+
+            const col = document.createElement('div');
+            col.className = 'column';
+
+            const filtered = colData.files.filter(f => f.name.toLowerCase().includes(query));
+            filtered.sort((a,b) => b.isDir - a.isDir || a.name.localeCompare(b.name)).forEach(f => {
+                const div = document.createElement('div');
+                const isSelected = (fbSelectedPath === f.absPath) || (fbSelPath[level + 1] && fbSelPath[level + 1].path === f.absPath);
+
+                div.className = 'col-item' + (isSelected ? ' selected' : '');
+
+                const icon = f.isDir ? "📁" : `<span class="icon-container"><img class="item-icon" src="/dylib.png" onerror="this.outerHTML='📄'" /></span>`;
+
+                div.innerHTML = `
+                    <div class="item-left">
+                        <span style="margin-right:6px; display:inline-flex; align-items:center;">${icon}</span>
+                        <span class="item-name" title="${f.name}">${f.name}</span>
+                    </div>
+                    ${f.isDir ? MAC_DISCLOSURE : ''}
+                `;
+
+                div.onclick = () => {
+                    fbSelectedPath = f.absPath;
+                    if (f.isDir) {
+                        navigateFbCol(level + 1, f.absPath);
+                    } else {
+                        fbSelPath = fbSelPath.slice(0, level + 1);
+                        renderFbColumns();
+                    }
+                    EL('fb-select').disabled = fbSelectFolderMode ? !f.isDir : f.isDir;
+                };
+
+                col.appendChild(div);
+            });
+
+            // Empty space deselect listener for modal columns
+            col.onclick = (e) => {
+                if (e.target === col) {
+                    fbSelPath = fbSelPath.slice(0, level);
+                    if (level > 0) {
+                        fbSelectedPath = fbSelPath[level - 1].path;
+                    } else {
+                        fbSelectedPath = "";
+                    }
+                    EL('fb-select').disabled = true;
+                    renderFbColumns();
+                }
+            };
+
+            container.appendChild(col);
+            browser.appendChild(container);
+
+            // Restore scroll positions cleanly
+            if (scrollPositions[level] !== undefined) {
+                col.scrollTop = scrollPositions[level];
+            }
+        });
+
+        alignViewport(browser, fbSelPath.length - 1);
+    }
+
+    EL('fb-search').oninput = () => renderFbColumns();
+    EL('fb-cancel').onclick = () => { fbResolveCallback(null); closeFileBrowser(); };
+    EL('fb-select').onclick = () => { fbResolveCallback(fbSelectedPath); closeFileBrowser(); };
+
+    function closeFileBrowser() {
+        EL('fb-overlay').classList.remove('active');
+        fbResolveCallback = null;
+    }
+
+    // --- Column Resizing Engine ---
+    let isResizing = false;
+    let activeHandle = null;
+    let startX, startWidth;
+
+    document.addEventListener('mousemove', (e) => {
+        if (!isResizing || !activeHandle) return;
+        const diff = e.clientX - startX;
+        const container = activeHandle.parentElement; // Target container directly
+        const newWidth = Math.max(150, Math.min(600, startWidth + diff));
+        container.style.width = newWidth + 'px';
+    });
+
+    document.addEventListener('mouseup', () => {
+        if (isResizing) {
+            isResizing = false; activeHandle = null;
+            document.body.classList.remove('resizing');
+        }
+    });
+
+    // --- Keyboard Navigation Engine (Finder Simulation) ---
+    window.addEventListener('keydown', (e) => {
+        if (document.activeElement && (document.activeElement.tagName === 'INPUT' || document.activeElement.tagName === 'SELECT')) return;
+        if (selPath.length === 0) return;
+
+        const activeLevel = selPath.length - 1;
+        const activeId = selPath[activeLevel];
+        const colContainers = Array.from(EL('browser').querySelectorAll('.column-container'));
+        const activeColContainer = colContainers[activeLevel];
+        if (!activeColContainer) return;
+
+        const activeCol = activeColContainer.querySelector('.column');
+        const items = Array.from(activeCol.querySelectorAll('.col-item'));
+        const currentIndex = items.findIndex(item => item.getAttribute('data-id') === activeId);
+
+        if (e.key === 'ArrowUp') {
+            e.preventDefault();
+            if (currentIndex > 0) {
+                const prevId = items[currentIndex - 1].getAttribute('data-id');
+                selPath[activeLevel] = prevId;
+                renderAndAlignColumn(activeLevel);
+            }
+        } else if (e.key === 'ArrowDown') {
+            e.preventDefault();
+            if (currentIndex < items.length - 1) {
+                const nextId = items[currentIndex + 1].getAttribute('data-id');
+                selPath[activeLevel] = nextId;
+                renderAndAlignColumn(activeLevel);
+            }
+        } else if (e.key === 'ArrowLeft') {
+            e.preventDefault();
+            if (activeLevel > 0) {
+                selPath.pop();
+                renderAndAlignColumn(activeLevel - 1);
+            }
+        } else if (e.key === 'ArrowRight') {
+            e.preventDefault();
+            const node = state.nodes[activeId];
+            if (node) {
+                const visibleChildren = Object.keys(node.children).filter(cid => {
+                    const child = state.nodes[cid];
+                    return child && (showSystemLibs || !child.isSystem);
+                });
+                if (visibleChildren.length > 0) {
+                    selPath.push(visibleChildren[0]);
+                    renderAndAlignColumn(activeLevel + 1);
+                }
+            }
+        }
+    });
+
+    function renderAndAlignColumn(targetLevel) {
+        render();
+        alignViewport(EL('browser'), targetLevel);
+    }
+
+    // Unified Fluid Horizontal Viewport Alignments (Both Directions)
+    function alignViewport(container, targetLevel) {
+        const cols = Array.from(container.querySelectorAll('.column-container'));
+        if (!cols[targetLevel]) return;
+
+        const targetCol = cols[targetLevel];
+        const colLeft = targetCol.offsetLeft;
+        const colWidth = targetCol.offsetWidth;
+        const viewportWidth = container.clientWidth;
+        const currentScroll = container.scrollLeft;
+
+        // Auto Scroll Forward (Rightward)
+        if (colLeft + colWidth > currentScroll + viewportWidth) {
+            container.scrollTo({ left: colLeft + colWidth - viewportWidth + 40, behavior: 'smooth' });
+        }
+        // Auto Scroll Backward (Leftward)
+        else if (colLeft < currentScroll) {
+            container.scrollTo({ left: Math.max(0, colLeft - 40), behavior: 'smooth' });
+        }
+    }
+
+    // --- Core Finder Views ---
+    function render() {
+        const b = EL('browser');
+        const currentScrollLeft = b.scrollLeft; // Retain active scroll state to prevent left-jumps
+        const previousScrollWidth = b.scrollWidth;
+
+        const scrolls = Array.from(b.querySelectorAll('.column')).map(c => c.scrollTop);
+        const widths = Array.from(b.querySelectorAll('.column-container')).map(c => c.style.width);
+
+        b.innerHTML = "";
+        if (!state.root || !state.nodes[state.root]) return;
+
+        renderCol(0, [state.root], scrolls, widths);
+
+        // Apply temporary scroll width spacer to enable smooth backward scrolling animations
+        if (b.scrollWidth < previousScrollWidth) {
+            const spacer = document.createElement('div');
+            spacer.id = 'scroll-spacer';
+            spacer.style.width = (previousScrollWidth - b.scrollWidth) + 'px';
+            spacer.style.flexShrink = '0';
+            b.appendChild(spacer);
+        }
+
+        b.scrollLeft = currentScrollLeft; // Restore scroll state right before frame redraw
+
+        renderInspector();
+    }
+
+    // Check if node itself has virtual RPath modifications, or incoming virtual reference modifications
+    function isNodeModified(id) {
+        return pendingOps.some(op => op.target === id || op.childId === id);
+    }
+
+    function renderCol(level, ids, savedScrolls, savedWidths) {
+        const filteredIds = ids.filter(id => {
+            const node = state.nodes[id];
+            if (!node) return false;
+            if (!showSystemLibs && node.isSystem) return false;
+            return true;
+        });
+
+        if (filteredIds.length === 0) return;
+
+        const container = document.createElement('div');
+        container.className = 'column-container';
+        container.style.width = (savedWidths && savedWidths[level]) ? savedWidths[level] : '250px';
+
+        const col = document.createElement('div');
+        col.className = 'column';
+
+        filteredIds.forEach(id => {
+            const node = state.nodes[id]; if(!node) return;
+            const div = document.createElement('div');
+            div.setAttribute('data-id', id);
+
+            const modified = isNodeModified(id);
+            div.className = 'col-item' + (selPath[level] === id ? ' selected' : '') + (node.isMissing ? ' missing' : '') + (node.isSystem ? ' system' : '') + (modified ? ' modified' : '');
+
+            const dylibUrl = "/dylib.png";
+            const dylibIconHtml = `<span class="icon-container"><img class="item-icon" src="${dylibUrl}" onerror="this.outerHTML='📁'" /></span>`;
+
+            const visibleChildren = Object.keys(node.children).filter(cid => {
+                const child = state.nodes[cid];
+                return child && (showSystemLibs || !child.isSystem);
+            });
+            const hasChildren = visibleChildren.length > 0;
+
+            div.innerHTML = `
+                <div class="item-left">
+                    ${dylibIconHtml}
+                    <span class="item-name" title="${id}">${node.fileName}</span>
+                </div>
+                ${hasChildren ? MAC_DISCLOSURE : ''}
+            `;
+
+            div.onclick = () => {
+                selPath = selPath.slice(0, level);
+                selPath.push(id);
+                renderAndAlignColumn(level);
+            };
+            col.appendChild(div);
+        });
+
+        // Empty space click deselect behavior matching native Finder
+        col.onclick = (e) => {
+            if (e.target === col) {
+                selPath = selPath.slice(0, level);
+                renderAndAlignColumn(level);
+
+                // Sweep trailing spacers after navigation settlements
+                setTimeout(() => {
+                    const spacer = EL('scroll-spacer');
+                    if (spacer) spacer.remove();
+                }, 350);
+            }
+        };
+
+        container.appendChild(col);
+
+        const handle = document.createElement('div');
+        handle.className = 'resize-handle';
+        handle.onmousedown = (e) => {
+            isResizing = true; activeHandle = handle;
+            startX = e.clientX; startWidth = container.offsetWidth;
+            document.body.classList.add('resizing');
+            e.preventDefault();
+        };
+        container.appendChild(handle);
+
+        EL('browser').appendChild(container);
+
+        if (savedScrolls && savedScrolls[level]) {
+            col.scrollTop = savedScrolls[level];
+        }
+
+        const selId = selPath[level];
+        if (selId && state.nodes[selId]) {
+            const children = Object.keys(state.nodes[selId].children);
+            if (children.length > 0 && !selPath.slice(0, level).includes(selId)) {
+                renderCol(level + 1, children, savedScrolls, savedWidths);
+            }
+        }
+    }
+
+    function getVirtualRpaths(id) {
+        let rp = [...(state.nodes[id].rpaths || [])].map(v => ({val:v, state:'normal'}));
+        pendingOps.forEach(op => {
+            if (op.target !== id) return;
+            if (op.type === 'add_rpath') rp.push({val:op.val, state:'added'});
+            if (op.type === 'delete_rpath') { let x = rp.find(r=>r.val===op.val && r.state!=='deleted'); if(x) x.state='deleted'; }
+            if (op.type === 'rename_rpath' || op.type === 'refactor_rpath') { let x = rp.find(r=>r.val===op.oldVal && r.state!=='deleted'); if(x) { x.val = op.newVal; x.state='added'; } }
+        });
+        return rp;
+    }
+
+    function renderInspector() {
+        const insp = EL('inspector');
+        if (selPath.length === 0) { insp.style.display = 'none'; return; }
+
+        const id = selPath[selPath.length - 1];
+        const parentId = selPath.length > 1 ? selPath[selPath.length - 2] : null;
+        const node = state.nodes[id];
+
+        insp.style.display = 'flex';
+        EL('insp-name').innerText = node.fileName;
+        EL('insp-name').style.color = node.isMissing ? 'var(--red)' : '';
+        EL('insp-arch').innerText = node.isMissing ? "Unresolved Dependency" : (node.architecture || "Unknown Arch");
+        EL('insp-path').innerText = node.absolutePath || "Not found on disk";
+
+        // Programmatic element creation for fallback images eliminates parser clashing
+        const headerIcon = EL('insp-header-icon');
+        headerIcon.innerHTML = "";
+        const img = document.createElement('img');
+        img.src = '/dylib.png';
+        img.style.width = '48px';
+        img.style.height = '48px';
+        img.style.objectFit = 'contain';
+        img.onerror = () => {
+            headerIcon.innerHTML = SVG_GENERIC_DYLIB;
+        };
+        headerIcon.appendChild(img);
+
+        EL('insp-flags').innerHTML = '';
+        node.dyldFlags.forEach(f => {
+            const p = document.createElement('span'); p.className = 'pill'; p.innerText = f;
+            EL('insp-flags').appendChild(p);
+        });
+
+        // Pending Modifications Preview Block
+        const fileOps = pendingOps.filter(op => op.target === id || op.childId === id);
+        if (fileOps.length > 0) {
+            EL('sec-mods').style.display = 'block';
+            const container = EL('insp-mods-list'); container.innerHTML = '';
+            fileOps.forEach(op => {
+                const row = document.createElement('div');
+                row.style.marginBottom = '6px';
+                row.style.fontSize = '11px';
+                if (op.type === 'add_rpath') row.innerHTML = `➕ Added RPath: <span style="font-family:monospace; word-break:break-all;">${op.val}</span>`;
+                else if (op.type === 'delete_rpath') row.innerHTML = `❌ Deleted RPath: <span style="font-family:monospace; text-decoration:line-through; word-break:break-all;">${op.val}</span>`;
+                else if (op.type === 'rename_rpath') row.innerHTML = `✏️ Renamed RPath: <span style="font-family:monospace; word-break:break-all;">${op.oldVal} ➜ ${op.newVal}</span>`;
+                else if (op.type === 'refactor_rpath') row.innerHTML = `⚙️ Refactored RPath: <span style="font-family:monospace; word-break:break-all;">${op.oldVal} ➜ ${op.newVal}</span>`;
+                else if (op.type === 'change_dep_with_file') {
+                    row.innerHTML = `🔗 Ref Change: <span style="font-family:monospace; word-break:break-all;">${op.oldRef} ➜ ${op.newRef}</span><br>📁 FS File Mode: <b>${op.file_action}</b>`;
+                }
+                container.appendChild(row);
+            });
+        } else {
+            EL('sec-mods').style.display = 'none';
+        }
+
+        // Parent Connection
+        if (parentId && state.nodes[parentId]) {
+            EL('sec-conn').style.display = 'block';
+            const edge = state.nodes[parentId].children[id];
+            EL('insp-conn-mech').innerText = edge.resolvedMechanism;
+            EL('insp-conn-ref').innerText = edge.originalReference;
+        } else {
+            EL('sec-conn').style.display = 'none';
+        }
+
+        // RPaths
+        EL('rpath-list').innerHTML = '';
+        const vRpaths = getVirtualRpaths(id);
+        if (activeRpathIndex >= vRpaths.length) activeRpathIndex = -1;
+
+        vRpaths.forEach((rp, i) => {
+            const d = document.createElement('div');
+            d.className = 'list-item' + (activeRpathIndex===i ? ' selected' : '') + (rp.state==='deleted'?' deleted':'') + (rp.state==='added'?' added':'');
+            d.innerText = rp.val;
+            d.onclick = () => { activeRpathIndex = i; renderInspector(); };
+            EL('rpath-list').appendChild(d);
+        });
+
+        const hasValidRpSel = activeRpathIndex >= 0 && vRpaths[activeRpathIndex].state !== 'deleted';
+        EL('rp-del').disabled = !hasValidRpSel;
+        EL('rp-ren').disabled = !hasValidRpSel;
+        EL('rp-ref').disabled = !hasValidRpSel;
+    }
+
+    function updateApplyBtn() {
+        const b = EL('apply-btn');
+        const d = EL('discard-btn');
+        if (pendingOps.length > 0) {
+            b.style.display = 'block';
+            b.innerText = `Apply Patches (${pendingOps.length})`;
+            d.style.display = 'block';
+        } else {
+            b.style.display = 'none';
+            d.style.display = 'none';
+        }
+    }
+
+    // Consolidated virtual state helpers
+    function queueVirtualOp(newOp) {
+        if (newOp.type === 'delete_rpath') {
+            const idx = pendingOps.findIndex(o => o.type === 'add_rpath' && o.target === newOp.target && o.val === newOp.val);
+            if (idx >= 0) { pendingOps.splice(idx, 1); return; }
+        }
+        if (newOp.type === 'add_rpath') {
+            const idx = pendingOps.findIndex(o => o.type === 'delete_rpath' && o.target === newOp.target && o.val === newOp.val);
+            if (idx >= 0) { pendingOps.splice(idx, 1); return; }
+        }
+        if (newOp.type === 'change_dep_with_file') {
+            const idx = pendingOps.findIndex(o => o.type === 'change_dep_with_file' && o.target === newOp.target && o.oldRef === newOp.oldRef);
+            if (idx >= 0) { pendingOps[idx] = newOp; return; }
+        }
+        pendingOps.push(newOp);
+    }
+
+    // Discard / Cancel all virtual Changes
+    EL('discard-btn').onclick = () => {
+        pendingOps = [];
+        updateApplyBtn();
+        render();
+    };
+
+    // RPath Handlers
+    EL('rp-add').onclick = () => {
+        openFileBrowser(true).then(folder => {
+            if (folder) {
+                queueVirtualOp({type:'add_rpath', target: selPath[selPath.length-1], val: folder});
+                updateApplyBtn();
+                render(); // Full render instantly updates modification highlight
+            }
+        });
+    };
+    EL('rp-del').onclick = () => {
+        const v = getVirtualRpaths(selPath[selPath.length-1])[activeRpathIndex].val;
+        queueVirtualOp({type:'delete_rpath', target: selPath[selPath.length-1], val: v});
+        updateApplyBtn();
+        render();
+    };
+    const handleRenameRefactor = (type) => {
+        const oldV = getVirtualRpaths(selPath[selPath.length-1])[activeRpathIndex].val;
+        openFileBrowser(true).then(folder => {
+            if (folder) {
+                queueVirtualOp({type, target: selPath[selPath.length-1], oldVal: oldV, newVal: folder});
+                updateApplyBtn();
+                render();
+            }
+        });
+    };
+    EL('rp-ren').onclick = () => handleRenameRefactor('rename_rpath');
+    EL('rp-ref').onclick = () => handleRenameRefactor('refactor_rpath');
+
+    // Advanced Dependency Reference Changing flow
+    let activeRefOld = "";
+    let activeRefParentId = "";
+    let activeRefChildId = "";
+
+    EL('fix-dep-btn').onclick = () => {
+        activeRefParentId = selPath[selPath.length-2];
+        activeRefChildId = selPath[selPath.length-1];
+        const parentNode = state.nodes[activeRefParentId];
+        activeRefOld = parentNode.children[activeRefChildId].originalReference;
+
+        EL('ref-parent-name').innerText = parentNode.fileName;
+        EL('ref-subpath').value = state.nodes[activeRefChildId].fileName;
+        EL('ref-file-action').value = "none";
+        EL('ref-type').value = "@rpath";
+
+        // Populate parent rpaths dropdown
+        const parentRpaths = getVirtualRpaths(activeRefParentId).filter(r=>r.state!=='deleted');
+        const rpSel = EL('ref-parent-rpath-sel'); rpSel.innerHTML = "";
+        parentRpaths.forEach(rp => {
+            const opt = document.createElement('option'); opt.value = rp.val; opt.innerText = rp.val;
+            rpSel.appendChild(opt);
+        });
+
+        updateRefPreview();
+        EL('ref-modal').classList.add('active');
+    };
+
+    EL('ref-type').onchange = () => {
+        EL('row-ref-dropdown').style.display = EL('ref-type').value === '@rpath' ? 'block' : 'none';
+        updateRefPreview();
+    };
+    EL('ref-parent-rpath-sel').onchange = updateRefPreview;
+    EL('ref-subpath').oninput = updateRefPreview;
+
+    function updateRefPreview() {
+        const type = EL('ref-type').value;
+        const subpath = EL('ref-subpath').value.trim();
+        const parentDir = state.nodes[activeRefParentId].absolutePath.substring(0, state.nodes[activeRefParentId].absolutePath.lastIndexOf('/'));
+
+        let finalRef = "";
+        let targetPhysicalAbs = "";
+
+        if (type === '@rpath') {
+            finalRef = "@rpath/" + subpath;
+            const activeParentRp = EL('ref-parent-rpath-sel').value;
+            if (activeParentRp) {
+                const resolvedRp = activeParentRp.replace('@loader_path', parentDir).replace('@executable_path', parentDir);
+                targetPhysicalAbs = resolvedRp + "/" + subpath;
+            } else {
+                targetPhysicalAbs = "No parent @rpath selected";
+            }
+        } else if (type === '@loader_path') {
+            finalRef = "@loader_path/" + subpath;
+            targetPhysicalAbs = parentDir + "/" + subpath;
+        } else if (type === '@executable_path') {
+            finalRef = "@executable_path/" + subpath;
+            const execBase = parentDir.endsWith("Frameworks") ? parentDir.substring(0, parentDir.lastIndexOf('/')) + "/MacOS" : parentDir;
+            targetPhysicalAbs = execBase + "/" + subpath;
+        } else {
+            finalRef = subpath;
+            targetPhysicalAbs = subpath;
+        }
+
+        if (targetPhysicalAbs.startsWith('/')) {
+            targetPhysicalAbs = targetPhysicalAbs.replace(/\/\+/g, '/');
+        }
+
+        EL('ref-absolute-preview').innerText = targetPhysicalAbs;
+    }
+
+    EL('ref-cancel').onclick = () => EL('ref-modal').classList.remove('active');
+
+    EL('ref-save').onclick = () => {
+        const type = EL('ref-type').value;
+        const subpath = EL('ref-subpath').value.trim();
+        const action = EL('ref-file-action').value;
+        const destPath = EL('ref-absolute-preview').innerText;
+        const childNode = state.nodes[activeRefChildId];
+
+        let finalRef = type === 'absolute' ? subpath : type + "/" + subpath;
+
+        queueVirtualOp({
+            type: 'change_dep_with_file',
+            target: activeRefParentId,
+            childId: activeRefChildId,
+            oldRef: activeRefOld,
+            newRef: finalRef,
+            srcPath: childNode.absolutePath || "",
+            destPath: destPath,
+            file_action: action
+        });
+
+        EL('ref-modal').classList.remove('active');
+        updateApplyBtn();
+        render(); // Repaint selection and active paths immediately
+    };
+
+    // --- Patch Apply Engine ---
+    EL('apply-btn').onclick = () => sendBatch();
+
+    function sendBatch() {
+        EL('apply-btn').disabled = true; EL('apply-btn').innerText = "Working...";
+        EL('resolve-btn').innerText = "Cancel";
+        EL('browser').classList.add('disabled');
+        document.body.classList.add('global-lock');
+
+        fetch('/api/apply', { method: 'POST', body: JSON.stringify({ops: pendingOps}) })
+            .then(r=>r.json()).then(d => {
+            document.body.classList.remove('global-lock');
+            EL('apply-btn').disabled = false;
+
+            if (d.success) {
+                pendingOps = []; updateApplyBtn();
+                startPolling();
+            } else {
+                EL('browser').classList.remove('disabled');
+                EL('resolve-btn').innerText = "Clear";
+                if (d.conflict) {
+                    EL('apply-btn').innerText = "Apply Patches";
+                    conflictOpCache = d.op;
+                    EL('conflict-text').innerText = "File exists: " + d.conflict;
+                    EL('conflict-modal').classList.add('active');
+                } else if (d.shared_warning) {
+                    EL('apply-btn').innerText = "Apply Patches";
+                    nudgeOpCache = d.op;
+                    EL('nudge-text').innerText = `Warning: ${d.childName} has ${d.incomingCount} incoming connections in the graph. Moving it might break references for other parent binaries.`;
+                    EL('nudge-modal').classList.add('active');
+                }
+            }
+        });
+    }
+
+    EL('conf-cancel').onclick = () => { EL('conflict-modal').classList.remove('active'); conflictOpCache = null; };
+    EL('conf-retry').onclick = () => {
+        if (conflictOpCache) conflictOpCache.conflict_resolution = EL('conflict-strat').value;
+        EL('conflict-modal').classList.remove('active');
+        sendBatch();
+    };
+
+    EL('nudge-abort').onclick = () => { EL('nudge-modal').classList.remove('active'); nudgeOpCache = null; };
+    EL('nudge-proceed').onclick = () => {
+        if (nudgeOpCache) nudgeOpCache.force = true;
+        EL('nudge-modal').classList.remove('active');
+        sendBatch();
+    };
+
+</script>
+</body>
+</html>

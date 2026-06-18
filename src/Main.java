@@ -4,40 +4,31 @@ import java.util.*;
 
 static Terminal t = new Terminal();
 
-void main(String[] args) {
+void main() {
     while(true) {
         var scanner = new Scanner(System.in);
-        t.format("Walker 3 by willuhd ", Terminal.Text.bold, Terminal.Colors.blue);
+        t.format("\nWalker 3 by willuhd ", Terminal.Text.bold, Terminal.Colors.blue);
         t.format("--help if needed\n", Terminal.Text.dim, Terminal.Colors.brightBlack);
 
         Path depPath;
         boolean verbose;
         while (true) {
-            IO.println("Enter the path of the dependency: ");
+            IO.println("Enter the path of the library: ");
+            t.format(">> ", Terminal.Text.italic, Terminal.Colors.green);
 
             // whitespace removal is needed because of flags
             var s = scanner.nextLine().trim();
 
             // could use a switch statement with flags but there are really only 2 here
             if(s.startsWith("--help") || s.startsWith("-h")){
-                IO.println("""
-                    =================================================
-                                  _                            _    \s
-                         ,___,   //  /,  _   ,_      /_   _   // ,_ \s
-                    _/_/_/(_/(__(/__/(__(/__/ (_   _/ (__(/__(/__/_)_
-                                                                /   \s
-                               print the help guide: --help    /    \s
-                               maximum verbosity: --verbose
-                               shut down walker: --shutdown
-                    
-                      to use walker, start by entering the path of a
-                          native library with C entry points.
-                        on macOS, native libraries end with .dylib
-                    
-                     for performance/code issues, contact me @WillUHD
-                    
-                     =================================================
-                    """);
+                t.format("\nWalker 3 ", Terminal.Text.italic, Terminal.Colors.blue);
+                t.format("help\n", Terminal.Text.bold, Terminal.Colors.brightBlack);
+                t.format("print this help menu: ", Terminal.Text.italic, Terminal.Colors.brightBlack);
+                t.format("--help\n", Terminal.Text.bold, Terminal.Colors.blue);
+                t.format("maximum verbosity: ", Terminal.Text.italic, Terminal.Colors.brightBlack);
+                t.format("--verbose\n", Terminal.Text.bold, Terminal.Colors.blue);
+                t.format("shut down Walker: ", Terminal.Text.italic, Terminal.Colors.brightBlack);
+                t.format("--shutdown\n\n", Terminal.Text.bold, Terminal.Colors.blue);
                 continue;
             } else if(s.startsWith("--shutdown") || s.startsWith("-s")) System.exit(0);
 

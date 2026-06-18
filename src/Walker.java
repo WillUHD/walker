@@ -1,32 +1,48 @@
+import java.io.BufferedReader;
 import java.io.IOException;
+import java.io.InputStreamReader;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.StandardCopyOption;
-import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.List;
-
+import java.util.*;
 
 public class Walker {
-    public static boolean logging = true;
+    static boolean logging = true;
+    static Path srcPath;
+    static Queue<Path> toCopy = new LinkedList<>();
+    static Set<Path> analyzed = new HashSet<>();
 
-    private static void log(String msg) {
-        if (logging) System.out.println(msg);
+    static void log(String msg) {
+        if (logging) IO.println(msg);
+    }
+    
+    static String send(String line) {
+        var pb = new ProcessBuilder("zsh", "-c", line);
+        pb.redirectErrorStream(true);
+        var sb = new StringBuilder();
+        try {
+            var p = pb.start();
+            var reader = new BufferedReader(new InputStreamReader(p.getInputStream()));
+            String output;
+            while ((output = reader.readLine()) != null) sb.append(output).append('\n');
+            p.waitFor();
+        } catch (IOException | InterruptedException e) {System.err.println(Arrays.toString(e.getStackTrace()));}
+        return sb.toString().trim();
     }
 
     public static void otool(String bin) {
         var current = Path.of(bin);
-        if (!Main.analyzed.add(current)) return;
+        if (!analyzed.add(current)) return;
 
         log("Analyzing current file " + bin);
         var binDir = current.getParent();
-        var otools = Main.send("otool -L " + bin).split("\n");
+        var otools = send("otool -L " + bin).split("\n");
 
         var rPaths = findRPaths(bin);
         var len = rPaths.length;
         if (len > 0){
             for (var p : rPaths) {
-                Main.toCopy.add(Path.of(p));
+                toCopy.add(Path.of(p));
                 log("Detected @rpath dependency: " + p);
             }
             log("@rpath detection complete: " + len + " rpaths. ");
@@ -39,15 +55,15 @@ public class Walker {
 
             if (line.startsWith("@loader_path/")) {
                 var dep = binDir.resolve(line.substring("@loader_path/".length()));
-                Main.toCopy.add(dep);
+                toCopy.add(dep);
                 log("Queued @loader_path dependency: " + dep);
             } else if (line.startsWith("@executable_path/")) {
                 var dep = binDir.resolve("Frameworks").resolve(line.substring("@executable_path/".length()));
-                Main.toCopy.add(dep);
+                toCopy.add(dep);
                 log("Queued @executable_path dependency: " + dep);
             } else if (!line.startsWith("/usr/lib") && !line.startsWith("/System/Library")) {
                 var dep = Path.of(line);
-                Main.toCopy.add(dep);
+                toCopy.add(dep);
                 log("Queued dependency: " + dep);
             }
         }
@@ -61,11 +77,11 @@ public class Walker {
     private static String[] findRPaths(String path) {
         log("Finding @rpaths for " + path);
 
-        var dirsOut = Main.send("otool -l " + path + " | grep -A2 LC_RPATH");
+        var dirsOut = send("otool -l " + path + " | grep -A2 LC_RPATH");
         if (dirsOut.isBlank()) return new String[0];
         var rDirsRaw = dirsOut.trim().split("\\)");
 
-        var pathsOut = Main.send("otool -L " + path + " | grep @rpath");
+        var pathsOut = send("otool -L " + path + " | grep @rpath");
         if (pathsOut.isBlank()) return new String[0];
         var rPathsRaw = pathsOut.trim().split("\n");
 
@@ -104,13 +120,13 @@ public class Walker {
     }
 
     private static void copy(Path execPath, String origPath) {
-        var copiedPath = Main.srcPath.resolve(execPath.getFileName());
+        var copiedPath = srcPath.resolve(execPath.getFileName());
         log("Copying path " + execPath + " to " + copiedPath);
         try {Files.copy(execPath, copiedPath, StandardCopyOption.REPLACE_EXISTING);}
         catch (IOException e) {System.err.println(Arrays.toString(e.getStackTrace()));}
         log("Patching path linking using install_name_tool. ");
 
-        Main.send("install_name_tool -id \"@loader_path/" + execPath.getFileName() + "\" " + copiedPath);
-        Main.send("install_name_tool -change \"" + execPath + "\" \"@loader_path/" + execPath.getFileName() + "\" \"" + origPath + "\"");
+        send("install_name_tool -id \"@loader_path/" + execPath.getFileName() + "\" " + copiedPath);
+        send("install_name_tool -change \"" + execPath + "\" \"@loader_path/" + execPath.getFileName() + "\" \"" + origPath + "\"");
     }
 }

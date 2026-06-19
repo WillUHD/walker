@@ -21,15 +21,15 @@ public class Main {
     static String currentRootPath = "";
 
     static class DepNode {
-        String id; // Absolute path or "missing:<parentId>|<ref>"
+        String id; // absolute path or "missing:<parentId>|<ref>"
         String fileName;
         String absolutePath;
         boolean isMissing;
         boolean isSystem;
         String architecture;
         List<String> rpaths = new CopyOnWriteArrayList<>();
-        Set<String> dyldFlags = Collections.synchronizedSet(new LinkedHashSet<>());
-        Map<String, Edge> children = Collections.synchronizedMap(new LinkedHashMap<>());
+        final Set<String> dyldFlags = Collections.synchronizedSet(new LinkedHashSet<>());
+        final Map<String, Edge> children = Collections.synchronizedMap(new LinkedHashMap<>());
         int incomingEdgesCount = 0;
     }
 
@@ -85,10 +85,8 @@ public class Main {
                 }
                 default -> {
                     var s = arg;
-                    if (s.equals("~"))
-                        s = System.getProperty("user.home");
-                    else if (s.startsWith("~/"))
-                        s = System.getProperty("user.home") + s.substring(1);
+                    if (s.equals("~")) s = System.getProperty("user.home");
+                    else if (s.startsWith("~/")) s = System.getProperty("user.home") + s.substring(1);
                     depPath = Path.of(s);
                 }
             }
@@ -97,9 +95,7 @@ public class Main {
         if (web) {
             try {
                 startWebServer(port);
-                synchronized (Main.class) {
-                    Main.class.wait();
-                }
+                synchronized (Main.class) {Main.class.wait();}
             } catch (Exception e) {
                 t.error("Failed to start web server: " + e.getMessage());
                 System.exit(1);
@@ -113,9 +109,7 @@ public class Main {
         }
 
         var success = new Main().runPatch(depPath, outPath, verbose);
-        if (!success) {
-            System.exit(1);
-        }
+        if (!success) System.exit(1);
     }
 
     static void printHelp() {
@@ -123,18 +117,15 @@ public class Main {
         t.print("by willuhd ", Terminal.Text.italic, Terminal.Colors.blue);
         t.print("\u001B]8;;https://github.com/willuhd/walker\u0007(https://github.com/willuhd/walker)\u001B]8;;\u0007",
                 Terminal.Text.underline, Terminal.Colors.brightBlack);
-
         t.print("\n- ", Terminal.Text.dim);
         t.println("Walker is a dependency patcher for Mach-O libraries (.dylib files).", Terminal.Text.normal);
         t.print("- ", Terminal.Text.dim);
         t.println("It recursively copies and patches non-system libraries into a single folder.", Terminal.Text.normal);
         t.print("- ", Terminal.Text.dim);
         t.println("For advanced custom path configurations, use the local web server option.", Terminal.Text.normal);
-
         t.print("\nTo show the help menu: ", Terminal.Text.bold, Terminal.Colors.brightCyan);
         t.print("walker ", Terminal.Colors.brightBlue);
         t.println("[--help | -h]", Terminal.Colors.white);
-
         t.print("\nPatch a library (cmd): ", Terminal.Text.bold, Terminal.Colors.brightCyan);
         t.print("walker ", Terminal.Colors.brightBlue);
         t.print("[path/to/library.dylib] ", Terminal.Colors.white);
@@ -143,7 +134,6 @@ public class Main {
         t.println(": specify a custom output folder to patch to", Terminal.Text.dim);
         t.print("  --verbose (-v)", Terminal.Colors.blue);
         t.println(": print all logs during the patching process", Terminal.Text.dim);
-
         t.print("\nPatch a library (web): ", Terminal.Text.bold, Terminal.Colors.brightCyan);
         t.print("walker ", Terminal.Colors.brightBlue);
         t.print("[--web | -w] ", Terminal.Colors.white);
@@ -152,7 +142,6 @@ public class Main {
         t.println(": specify a custom port for the server", Terminal.Text.dim);
         t.print("  --verbose (-v)", Terminal.Colors.blue);
         t.println(": print all logs for the server and patches run", Terminal.Text.dim);
-
         t.print("\nWalker supports entering relative paths (like ", Terminal.Text.dim);
         t.print("./", Terminal.Text.bold, Terminal.Colors.brightGreen);
         t.print(", ", Terminal.Text.dim);
@@ -283,9 +272,7 @@ public class Main {
             }
             p.waitFor();
             return sb.toString().trim();
-        } catch (Exception e) {
-            return "";
-        }
+        } catch (Exception e) {return "";}
     }
 
     static void startDiscovery(String rootPath) {
@@ -294,11 +281,9 @@ public class Main {
         stateNodes.clear();
 
         String resolvedPath = rootPath;
-        if (resolvedPath.equals("~")) {
-            resolvedPath = System.getProperty("user.home");
-        } else if (resolvedPath.startsWith("~/")) {
-            resolvedPath = System.getProperty("user.home") + resolvedPath.substring(1);
-        }
+        if (resolvedPath.equals("~")) resolvedPath = System.getProperty("user.home");
+        else if (resolvedPath.startsWith("~/")) resolvedPath = System.getProperty("user.home") + resolvedPath.substring(1);
+
         Path targetPathObj = Path.of(resolvedPath).toAbsolutePath().normalize();
         currentRootPath = targetPathObj.toString();
 
@@ -344,17 +329,12 @@ public class Main {
         placeholder.isSystem = absPath.startsWith("/usr/lib") || absPath.startsWith("/System/Library");
         placeholder.isMissing = false;
 
-        if (stateNodes.putIfAbsent(absPath, placeholder) != null) {
-            return;
-        }
+        if (stateNodes.putIfAbsent(absPath, placeholder) != null) return;
 
         phaser.register();
         executor.submit(() -> {
-            try {
-                scanNodeTask(placeholder, accumulatedRpaths, executor, phaser);
-            } finally {
-                phaser.arriveAndDeregister();
-            }
+            try {scanNodeTask(placeholder, accumulatedRpaths, executor, phaser);}
+            finally {phaser.arriveAndDeregister();}
         });
     }
 
@@ -365,18 +345,14 @@ public class Main {
             node.architecture = exec("file", "-b", absPath)
                     .replace("Mach-O 64-bit dynamically linked shared library ", "")
                     .trim();
-        } else {
-            node.architecture = "Unknown";
-        }
+        } else node.architecture = "Unknown";
 
         List<String> rpaths = new ArrayList<>();
         List<DependencyRef> deps = new ArrayList<>();
         parseMachO(absPath, rpaths, deps);
 
         node.rpaths.addAll(rpaths);
-        for (var d : deps) {
-            node.dyldFlags.add(d.cmd());
-        }
+        for (var d : deps) node.dyldFlags.add(d.cmd());
 
         var nextRpaths = new LinkedHashSet<>(accumulatedRpaths);
         nextRpaths.addAll(node.rpaths);
@@ -389,15 +365,11 @@ public class Main {
             var mechanism = res != null ? res.mechanism() : "unresolved";
 
             var edge = new Edge(ref, mechanism, depRef.cmd());
-
             if (resolvedPath != null && resolvedPath.equals(absPath)) continue;
-
             var isSysRef = ref.startsWith("/usr/lib") || ref.startsWith("/System/Library");
 
             if (resolvedPath != null && (isSysRef || Files.exists(Path.of(resolvedPath)))) {
-                synchronized (node.children) {
-                    node.children.put(resolvedPath, edge);
-                }
+                synchronized (node.children) {node.children.put(resolvedPath, edge);}
                 if (!isSysRef) {
                     submitScan(resolvedPath, nextRpaths, executor, phaser);
                 } else if (!stateNodes.containsKey(resolvedPath)) {
@@ -412,9 +384,7 @@ public class Main {
                 }
             } else {
                 var missingId = "missing:" + absPath + "|" + ref;
-                synchronized (node.children) {
-                    node.children.put(missingId, edge);
-                }
+                synchronized (node.children) {node.children.put(missingId, edge);}
 
                 var mNode = new DepNode();
                 mNode.id = missingId;
@@ -433,9 +403,8 @@ public class Main {
         String currentCmd = null;
         for (String line : lines) {
             line = line.trim();
-            if (line.startsWith("cmd ")) {
-                currentCmd = line.substring(4).trim();
-            } else if (line.startsWith("path ") && "LC_RPATH".equals(currentCmd)) {
+            if (line.startsWith("cmd ")) currentCmd = line.substring(4).trim();
+            else if (line.startsWith("path ") && "LC_RPATH".equals(currentCmd)) {
                 int openParen = line.indexOf('(');
                 String val = openParen > 5 ? line.substring(5, openParen).trim() : line.substring(5).trim();
                 rpaths.add(val);
@@ -451,9 +420,9 @@ public class Main {
         var parentDir = Path.of(parentAbs).getParent();
         if (parentDir == null) return null;
 
-        if (ref.startsWith("@loader_path/")) {
+        if (ref.startsWith("@loader_path/"))
             return new PathResolution(parentDir.resolve(ref.substring(13)).normalize().toString(), "loader_path");
-        } else if (ref.startsWith("@executable_path/")) {
+        else if (ref.startsWith("@executable_path/")) {
             var execBase = parentDir.endsWith("Frameworks") ? parentDir.getParent().resolve("MacOS") : parentDir;
             return new PathResolution(execBase.resolve(ref.substring(17)).normalize().toString(), "executable_path");
         } else if (ref.startsWith("@rpath/")) {
@@ -465,9 +434,7 @@ public class Main {
                 if (Files.exists(candidate)) return new PathResolution(candidate.toString(), "rpath (" + rp + ")");
             }
             return new PathResolution(null, "rpath (Not Found)");
-        } else {
-            return new PathResolution(ref, "absolute");
-        }
+        } else return new PathResolution(ref, "absolute");
     }
 
     static void cleanup(Path path) {
@@ -475,9 +442,8 @@ public class Main {
         try (var walk = Files.walk(path)) {
             walk.sorted(Comparator.reverseOrder())
                     .forEach(p -> {
-                        try {
-                            Files.delete(p);
-                        } catch (IOException ignored) {}
+                        try {Files.delete(p);}
+                        catch (IOException ignored) {}
                     });
         } catch (IOException ignored) {}
     }
@@ -487,7 +453,7 @@ public class Main {
         server.createContext("/", new WebHandler());
         server.setExecutor(Executors.newVirtualThreadPerTaskExecutor());
         server.start();
-        IO.println("Walker 3 Web Server running at http://localhost:" + port);
+        IO.println("Walker 3.1 web server running at http://localhost:" + port);
     }
 
     static class WebHandler implements HttpHandler {
@@ -497,45 +463,34 @@ public class Main {
             var method = ex.getRequestMethod();
 
             try {
-                if (path.equals("/") && method.equals("GET")) {
-                    serveHtml(ex);
-                } else if (path.equals("/dylib.png") && method.equals("GET")) {
-                    serveIcon(ex);
-                } else if (path.equals("/folder.png") && method.equals("GET")) {
-                    serveFolderIcon(ex);
-                } else if (path.equals("/api/discover") && method.equals("POST")) {
+                if (path.equals("/") && method.equals("GET")) serveHtml(ex);
+                else if (path.equals("/dylib.png") && method.equals("GET")) serveIcon(ex);
+                else if (path.equals("/folder.png") && method.equals("GET")) serveFolderIcon(ex);
+                else if (path.equals("/api/discover") && method.equals("POST")) {
                     var bodyStr = new String(ex.getRequestBody().readAllBytes(), StandardCharsets.UTF_8).trim();
                     String reqPath = "";
                     try {
                         @SuppressWarnings("unchecked")
                         var parsed = (Map<String, Object>) new JSONParser(bodyStr).parse();
-                        if (parsed != null && parsed.get("path") != null) {
-                            reqPath = parsed.get("path").toString();
-                        }
-                    } catch (Exception e) {
-                        reqPath = bodyStr;
-                    }
+                        if (parsed != null && parsed.get("path") != null) reqPath = parsed.get("path").toString();
+                    } catch (Exception e) {reqPath = bodyStr;}
                     startDiscovery(reqPath);
                     sendJSON(ex, 200, Map.of("status", "started"));
-                } else if (path.equals("/api/status") && method.equals("GET")) {
-                    sendJSON(ex, 200, buildStatus());
-                } else if (path.equals("/api/clear") && method.equals("POST")) {
+                } else if (path.equals("/api/status") && method.equals("GET")) sendJSON(ex, 200, buildStatus());
+                else if (path.equals("/api/clear") && method.equals("POST")) {
                     cancelScan.set(true);
                     stateNodes.clear();
                     currentRootPath = "";
                     sendJSON(ex, 200, Map.of("status", "cleared"));
-                } else if (path.equals("/api/fs-list") && method.equals("GET")) {
-                    handleFileSystemList(ex);
-                } else if (path.equals("/api/apply") && method.equals("POST")) {
+                } else if (path.equals("/api/fs-list") && method.equals("GET")) handleFileSystemList(ex);
+                else if (path.equals("/api/apply") && method.equals("POST")) {
                     var bodyStr = new String(ex.getRequestBody().readAllBytes(), StandardCharsets.UTF_8);
                     @SuppressWarnings("unchecked")
                     var req = (Map<String, Object>) new JSONParser(bodyStr).parse();
                     var res = applyPatchBatch(req);
                     if (Boolean.TRUE.equals(res.get("success"))) startDiscovery(currentRootPath);
                     sendJSON(ex, 200, res);
-                } else {
-                    ex.sendResponseHeaders(404, -1);
-                }
+                } else ex.sendResponseHeaders(404, -1);
             } catch (Exception e) {
                 e.printStackTrace();
                 sendJSON(ex, 500, Map.of("error", e.getMessage()));
@@ -555,9 +510,7 @@ public class Main {
                     ex.sendResponseHeaders(200, b.length);
                     ex.getResponseBody().write(b);
                 }
-            } finally {
-                ex.getResponseBody().close();
-            }
+            } finally {ex.getResponseBody().close();}
         }
 
         private void serveIcon(HttpExchange ex) throws IOException {
@@ -567,12 +520,8 @@ public class Main {
                     ex.getResponseHeaders().set("Content-Type", "image/png");
                     ex.sendResponseHeaders(200, b.length);
                     ex.getResponseBody().write(b);
-                } else {
-                    ex.sendResponseHeaders(404, -1);
-                }
-            } finally {
-                ex.getResponseBody().close();
-            }
+                } else ex.sendResponseHeaders(404, -1);
+            } finally {ex.getResponseBody().close();}
         }
 
         private void serveFolderIcon(HttpExchange ex) throws IOException {
@@ -582,12 +531,8 @@ public class Main {
                     ex.getResponseHeaders().set("Content-Type", "image/png");
                     ex.sendResponseHeaders(200, b.length);
                     ex.getResponseBody().write(b);
-                } else {
-                    ex.sendResponseHeaders(404, -1);
-                }
-            } finally {
-                ex.getResponseBody().close();
-            }
+                } else ex.sendResponseHeaders(404, -1);
+            } finally {ex.getResponseBody().close();}
         }
 
         private void handleFileSystemList(HttpExchange ex) throws IOException {
@@ -634,24 +579,22 @@ public class Main {
 
     @SuppressWarnings("unchecked")
     static Map<String, Object> applyPatchBatch(Map<String, Object> payload) {
-        IO.println("\n--- BEGIN BATCH PATCH OPERATION ---");
+        t.println("\nCurrent patch log:", Terminal.Text.bold, Terminal.Colors.brightBlue);
         var ops = (List<Map<String, Object>>) payload.get("ops");
         var affectedTargets = new LinkedHashSet<String>();
 
         for (var op : ops) {
             if ("refactor_rpath".equals(op.get("type"))) {
                 var conflict = checkRefactorConflicts(op);
-                if (conflict != null && !op.containsKey("conflict_resolution")) {
+                if (conflict != null && !op.containsKey("conflict_resolution"))
                     return Map.of("success", false, "conflict", conflict, "op", op);
-                }
             } else if ("change_dep_with_file".equals(op.get("type"))) {
                 var actionType = (String) op.get("file_action");
                 var childId = (String) op.get("childId");
                 var childNode = stateNodes.get(childId);
 
-                if ("move".equals(actionType) && childNode != null && childNode.incomingEdgesCount > 1 && !op.containsKey("force")) {
+                if ("move".equals(actionType) && childNode != null && childNode.incomingEdgesCount > 1 && !op.containsKey("force"))
                     return Map.of("success", false, "shared_warning", true, "childName", childNode.fileName, "incomingCount", childNode.incomingEdgesCount, "op", op);
-                }
             }
         }
 
@@ -664,25 +607,25 @@ public class Main {
             switch (type) {
                 case "add_rpath" -> {
                     var val = (String) op.get("val");
-                    IO.println("Adding rpath to " + target + ": " + val);
+                    t.println("  - Adding rpath to " + target + ": " + val, Terminal.Text.dim);
                     exec("install_name_tool", "-add_rpath", val, target);
                 }
                 case "delete_rpath" -> {
                     var val = (String) op.get("val");
-                    IO.println("Deleting rpath from " + target + ": " + val);
+                    t.println("  - Deleting rpath from " + target + ": " + val, Terminal.Text.dim);
                     exec("install_name_tool", "-delete_rpath", val, target);
                 }
                 case "rename_rpath" -> {
                     var oldV = (String) op.get("oldVal");
                     var newV = (String) op.get("newVal");
-                    IO.println("Renaming rpath in " + target + " from " + oldV + " to " + newV);
+                    t.println("  - Renaming rpath in " + target + " from " + oldV + " to " + newV, Terminal.Text.dim);
                     exec("install_name_tool", "-rpath", oldV, newV, target);
                 }
                 case "refactor_rpath" -> {
                     var oldV = (String) op.get("oldVal");
                     var newV = (String) op.get("newVal");
                     var res = (String) op.get("conflict_resolution");
-                    IO.println("Refactoring rpath in " + target + " from " + oldV + " to " + newV);
+                    t.println("  - Refactoring rpath in " + target + " from " + oldV + " to " + newV, Terminal.Text.dim);
 
                     var copied = performRefactorCopy(target, oldV, newV, res);
                     affectedTargets.addAll(copied);
@@ -691,7 +634,7 @@ public class Main {
                 case "change_dep" -> {
                     var oldRef = (String) op.get("oldRef");
                     var newRef = (String) op.get("newRef");
-                    IO.println("Changing reference string in " + target + " from " + oldRef + " to " + newRef);
+                    t.println("  - Changing reference string in " + target + " from " + oldRef + " to " + newRef, Terminal.Text.dim);
                     exec("install_name_tool", "-change", oldRef, newRef, target);
                 }
                 case "change_dep_with_file" -> {
@@ -704,12 +647,12 @@ public class Main {
 
         for (var tgt : affectedTargets) {
             if (tgt != null && Files.exists(Path.of(tgt))) {
-                IO.println("Re-signing altered binary: " + tgt);
+                t.println("  - Re-signing altered binary: " + tgt, Terminal.Text.dim);
                 exec("codesign", "-f", "-s", "-", tgt);
             }
         }
 
-        IO.println("--- BATCH PATCH OPERATION COMPLETE ---\n");
+        t.println("Patching complete.\n", Terminal.Text.bold, Terminal.Colors.brightBlue);
         return Map.of("success", true);
     }
 
@@ -737,7 +680,7 @@ public class Main {
                 return destPathVal;
             }
 
-            IO.println("Updating Mach-O reference in: " + targetParent);
+            t.println("  - Updating Mach-O reference in: " + targetParent, Terminal.Text.dim);
             exec("install_name_tool", "-change", oldRef, newRef, targetParent);
         } catch (Exception e) {
             t.error("Relocation Error: " + e.getMessage());
@@ -796,21 +739,19 @@ public class Main {
                     var dest = destDir.resolve(src.getFileName());
                     if (Files.exists(dest)) {
                         if ("skip".equals(resolution)) {
-                            IO.println("Skipping copy: " + dest);
+                            t.println("  - Skipping copy: " + dest, Terminal.Text.dim);
                             continue;
                         } else if ("replace".equals(resolution)) {
-                            IO.println("Renaming existing conflict destination to " + dest + "-old");
+                            t.println("  - Renaming existing conflict destination to " + dest + "-old", Terminal.Text.dim);
                             Files.move(dest, Path.of(dest.toString() + "-old"), StandardCopyOption.REPLACE_EXISTING);
                         }
                     }
-                    IO.println("Copying refactored file: " + src + " -> " + dest);
+                    t.println("  - Copying refactored file: " + src + " -> " + dest, Terminal.Text.dim);
                     Files.copy(src, dest, StandardCopyOption.REPLACE_EXISTING);
                     copiedPaths.add(dest.toString());
                 }
             }
-        } catch (IOException e) {
-            t.error("Refactor error: " + e.getMessage());
-        }
+        } catch (IOException e) {t.error("Refactoring error: " + e.getMessage());}
         return copiedPaths;
     }
 

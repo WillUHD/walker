@@ -4,6 +4,7 @@ import com.sun.net.httpserver.HttpServer;
 
 import java.io.*;
 import java.nio.file.*;
+import java.security.MessageDigest;
 import java.util.*;
 import java.util.concurrent.*;
 import java.util.concurrent.atomic.AtomicBoolean;
@@ -18,11 +19,13 @@ public class Main {
     static final Map<String, DepNode> stateNodes = new ConcurrentHashMap<>();
     static final AtomicBoolean isScanning = new AtomicBoolean(false);
     static final AtomicBoolean cancelScan = new AtomicBoolean(false);
+    static final Semaphore execSemaphore = new Semaphore(16);
     static String currentRootPath = "";
 
     static class DepNode {
         String id; // absolute path or "missing:<parentId>|<ref>"
         String fileName;
+        String targetFileName;
         String absolutePath;
         boolean isMissing;
         boolean isSystem;
@@ -130,17 +133,17 @@ public class Main {
         t.print("walker ", Terminal.Colors.brightBlue);
         t.print("[path/to/library.dylib] ", Terminal.Colors.white);
         t.println("[flags]", Terminal.Text.normal, Terminal.Colors.brightCyan);
-        t.print("  --output  (-o)", Terminal.Colors.blue);
+        t.print("  --output   (-o)", Terminal.Colors.blue);
         t.println(": specify a custom output folder to patch to", Terminal.Text.dim);
-        t.print("  --verbose (-v)", Terminal.Colors.blue);
+        t.print("  --verbose  (-v)", Terminal.Colors.blue);
         t.println(": print all logs during the patching process", Terminal.Text.dim);
         t.print("\nPatch a library (web): ", Terminal.Text.bold, Terminal.Colors.brightCyan);
         t.print("walker ", Terminal.Colors.brightBlue);
         t.print("[--web | -w] ", Terminal.Colors.white);
         t.println("[flags]", Terminal.Text.normal, Terminal.Colors.brightCyan);
-        t.print("  --port    (-p)", Terminal.Colors.blue);
+        t.print("  --port     (-p)", Terminal.Colors.blue);
         t.println(": specify a custom port for the server", Terminal.Text.dim);
-        t.print("  --verbose (-v)", Terminal.Colors.blue);
+        t.print("  --verbose  (-v)", Terminal.Colors.blue);
         t.println(": print all logs for the server and patches run", Terminal.Text.dim);
         t.print("\nWalker supports entering relative paths (like ", Terminal.Text.dim);
         t.print("./", Terminal.Text.bold, Terminal.Colors.brightGreen);
@@ -191,12 +194,14 @@ public class Main {
                     .filter(n -> !n.isSystem && !n.isMissing)
                     .toList();
 
+            resolveCollisions(localNodes);
+
             // Parallel patching and signing using Virtual Threads
             try (var executor = Executors.newVirtualThreadPerTaskExecutor()) {
                 for (var node : localNodes) {
                     executor.submit(() -> {
                         Path original = Path.of(node.absolutePath);
-                        Path target = srcPath.resolve(node.fileName);
+                        Path target = srcPath.resolve(node.targetFileName);
                         log("Copying " + original + " to " + target);
                         try {
                             Files.copy(original, target, StandardCopyOption.REPLACE_EXISTING);
@@ -205,7 +210,7 @@ public class Main {
                             return;
                         }
 
-                        exec("install_name_tool", "-id", "@loader_path/" + node.fileName, target.toString());
+                        exec("install_name_tool", "-id", "@loader_path/" + node.targetFileName, target.toString());
 
                         synchronized (node.children) {
                             for (var entry : node.children.entrySet()) {
@@ -213,8 +218,8 @@ public class Main {
                                 var edge = entry.getValue();
                                 var childNode = stateNodes.get(childId);
                                 if (childNode != null && !childNode.isSystem) {
-                                    String newRef = "@loader_path/" + childNode.fileName;
-                                    log("Updating ref in " + node.fileName + ": " + edge.originalReference() + " -> " + newRef);
+                                    String newRef = "@loader_path/" + childNode.targetFileName;
+                                    log("Updating ref in " + node.targetFileName + ": " + edge.originalReference() + " -> " + newRef);
                                     exec("install_name_tool", "-change", edge.originalReference(), newRef, target.toString());
                                 }
                             }
@@ -260,8 +265,46 @@ public class Main {
         else IO.print(("\r" + msg + "\u001B[K").translateEscapes());
     }
 
+    static String getFileHash(Path path) {
+        try (var is = Files.newInputStream(path)) {
+            var digest = MessageDigest.getInstance("SHA-256");
+            byte[] buffer = new byte[8192];
+            int read;
+            while ((read = is.read(buffer)) != -1) digest.update(buffer, 0, read);
+            var sb = new StringBuilder();
+            for (byte b : digest.digest()) sb.append(String.format("%02x", b));
+            return sb.toString();
+        } catch (Exception e) {return "";}
+    }
+
+    static void resolveCollisions(List<DepNode> localNodes) {
+        var hashToName = new HashMap<String, String>();
+        var nameToPath = new HashMap<String, String>();
+        for (var node : localNodes) {
+            var original = Path.of(node.absolutePath);
+            var hash = getFileHash(original);
+            if (hashToName.containsKey(hash)) {
+                node.targetFileName = hashToName.get(hash);
+            } else {
+                var candidateName = node.fileName;
+                if (nameToPath.containsKey(candidateName)) {
+                    var parentName = original.getParent().getFileName().toString();
+                    candidateName = parentName + "_" + node.fileName;
+                    if (nameToPath.containsKey(candidateName)) {
+                        candidateName = (hash.isEmpty() ? "unique" : hash.substring(0, 8)) + "_" + node.fileName;
+                    }
+                    t.println("Warning: Filename collision detected. Renaming " + original + " to " + candidateName, Terminal.Colors.yellow);
+                }
+                node.targetFileName = candidateName;
+                if (!hash.isEmpty()) hashToName.put(hash, candidateName);
+                nameToPath.put(candidateName, node.absolutePath);
+            }
+        }
+    }
+
     static String exec(String... command) {
         try {
+            execSemaphore.acquire();
             var pb = new ProcessBuilder(command);
             pb.redirectErrorStream(true);
             var p = pb.start();
@@ -273,6 +316,7 @@ public class Main {
             p.waitFor();
             return sb.toString().trim();
         } catch (Exception e) {return "";}
+        finally {execSemaphore.release();}
     }
 
     static void startDiscovery(String rootPath) {
@@ -326,6 +370,7 @@ public class Main {
         placeholder.id = absPath;
         placeholder.absolutePath = absPath;
         placeholder.fileName = Path.of(absPath).getFileName().toString();
+        placeholder.targetFileName = placeholder.fileName;
         placeholder.isSystem = absPath.startsWith("/usr/lib") || absPath.startsWith("/System/Library");
         placeholder.isMissing = false;
 
@@ -377,6 +422,7 @@ public class Main {
                     sysNode.id = resolvedPath;
                     sysNode.absolutePath = resolvedPath;
                     sysNode.fileName = Path.of(resolvedPath).getFileName().toString();
+                    sysNode.targetFileName = sysNode.fileName;
                     sysNode.isSystem = true;
                     sysNode.isMissing = false;
                     sysNode.architecture = "macOS Dynamic Shared Cache";
@@ -389,6 +435,7 @@ public class Main {
                 var mNode = new DepNode();
                 mNode.id = missingId;
                 mNode.fileName = Path.of(ref).getFileName().toString();
+                mNode.targetFileName = mNode.fileName;
                 mNode.isMissing = true;
                 mNode.isSystem = false;
                 mNode.absolutePath = null;
@@ -422,14 +469,12 @@ public class Main {
 
         if (ref.startsWith("@loader_path/"))
             return new PathResolution(parentDir.resolve(ref.substring(13)).normalize().toString(), "loader_path");
-        else if (ref.startsWith("@executable_path/")) {
-            var execBase = parentDir.endsWith("Frameworks") ? parentDir.getParent().resolve("MacOS") : parentDir;
-            return new PathResolution(execBase.resolve(ref.substring(17)).normalize().toString(), "executable_path");
-        } else if (ref.startsWith("@rpath/")) {
+        else if (ref.startsWith("@executable_path/"))
+            return new PathResolution(null, "executable_path (unresolved)");
+        else if (ref.startsWith("@rpath/")) {
             var suffix = ref.substring(7);
             for (var rp : rpaths) {
-                var testRp = rp.replace("@loader_path", parentDir.toString())
-                        .replace("@executable_path", parentDir.toString());
+                var testRp = rp.replace("@loader_path", parentDir.toString());
                 var candidate = Path.of(testRp).resolve(suffix).normalize();
                 if (Files.exists(candidate)) return new PathResolution(candidate.toString(), "rpath (" + rp + ")");
             }
@@ -667,6 +712,7 @@ public class Main {
         try {
             var src = Path.of(srcPathVal);
             var dest = Path.of(destPathVal);
+            var fileAltered = false;
 
             if (!"none".equals(action) && Files.exists(src) && !src.toRealPath().equals(dest.toAbsolutePath())) {
                 Files.createDirectories(dest.getParent());
@@ -677,11 +723,13 @@ public class Main {
                     IO.println("Copying physical binary: " + src + " -> " + dest);
                     Files.copy(src, dest, StandardCopyOption.REPLACE_EXISTING);
                 }
-                return destPathVal;
+                fileAltered = true;
             }
 
             t.println("  - Updating Mach-O reference in: " + targetParent, Terminal.Text.dim);
             exec("install_name_tool", "-change", oldRef, newRef, targetParent);
+
+            if (fileAltered) return destPathVal;
         } catch (Exception e) {
             t.error("Relocation Error: " + e.getMessage());
         }
@@ -756,8 +804,7 @@ public class Main {
     }
 
     static Path resolveAbstractPath(String rp, Path baseDir) {
-        var testRp = rp.replace("@loader_path", baseDir.toString())
-                .replace("@executable_path", baseDir.toString());
+        var testRp = rp.replace("@loader_path", baseDir.toString());
         return Path.of(testRp).normalize();
     }
 
@@ -767,6 +814,7 @@ public class Main {
             var nData = new LinkedHashMap<String, Object>();
             nData.put("id", n.id);
             nData.put("fileName", n.fileName);
+            nData.put("targetFileName", n.targetFileName == null ? "" : n.targetFileName);
             nData.put("absolutePath", n.absolutePath == null ? "" : n.absolutePath);
             nData.put("isMissing", n.isMissing);
             nData.put("isSystem", n.isSystem);

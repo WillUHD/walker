@@ -34,7 +34,7 @@
         button { background: var(--btn); border: 1px solid var(--btn-border); color: var(--text); padding: 5px 12px; border-radius: 6px; cursor: pointer; font-size: 13px; font-weight: 500; }
         button:disabled { opacity: 0.5; cursor: not-allowed; }
         button.primary { background: var(--blue); color: #fff; border-color: transparent; }
-        button.purple-btn { background: var(--purple); color: #win; border-color: transparent; color: #fff; }
+        button.purple-btn { background: var(--purple); color: var(--win); border-color: transparent; color: #fff; }
 
         /* Main Layout */
         .main { display: flex; flex: 1; overflow: hidden; }
@@ -140,11 +140,14 @@
         .btn-row { display: flex; gap: 6px; }
         .btn-row button { flex: 1; }
 
-        /* Modal overlays */
+        /* Modal overlays and inner elements */
         .overlay { position: fixed; top:0; left:0; right:0; bottom:0; background: rgba(0,0,0,0.4); display: none; align-items: center; justify-content: center; z-index: 100; }
         .modal { background: var(--win); border: 1px solid var(--border); border-radius: 10px; padding: 20px; width: 440px; box-shadow: 0 10px 30px rgba(0,0,0,0.3); }
         .modal h3 { margin: 0 0 15px; font-size: 15px; }
         .modal-row { margin-bottom: 15px; }
+        .modal-row.flex-row { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-bottom: 15px; }
+        .modal-row.flex-row label { margin: 0; font-weight: 500; }
+        .modal-row.flex-row select { margin: 0; width: auto; flex: 1; max-width: 250px; }
         .modal select, .modal input { width: 100%; box-sizing: border-box; padding: 6px; border-radius: 4px; border: 1px solid var(--border); background: var(--bg); color: var(--text); margin-top: 6px;}
         .overlay.active { display: flex; }
 
@@ -216,7 +219,7 @@
                 <h4 style="margin: 0; font-size: 13px; font-weight: 600;">Properties</h4>
                 <button id="toggle-sys" style="border-radius: 12px; font-size: 11px; padding: 2px 10px; transition: all 0.15s;">Show hidden</button>
             </div>
-            <div class="prop-row">
+            <div class="prop-row" id="prop-row-path">
                 <span style="color: var(--dim); margin-bottom: 4px;">Absolute Path:</span>
                 <div class="prop-val" id="insp-path"></div>
             </div>
@@ -299,16 +302,15 @@
             <span>Parent:</span>
             <div class="prop-val" id="ref-parent-name" style="margin-top:4px;">Parent</div>
         </div>
-        <div class="modal-row">
+        <div class="modal-row flex-row">
             <label>Link Type:</label>
             <select id="ref-type">
                 <option value="@rpath">@rpath</option>
                 <option value="@loader_path">@loader_path</option>
-                <option value="@executable_path">@executable_path</option>
                 <option value="absolute">Absolute Path</option>
             </select>
         </div>
-        <div class="modal-row" id="row-ref-dropdown" style="display:none;">
+        <div class="modal-row flex-row" id="row-ref-dropdown" style="display:none;">
             <label>Select Parent's @rpath:</label>
             <select id="ref-parent-rpath-sel"></select>
         </div>
@@ -319,7 +321,7 @@
                 <button id="ref-subpath-browse" style="display:none; flex-shrink:0; padding:6px 12px;">Browse...</button>
             </div>
         </div>
-        <div class="modal-row">
+        <div class="modal-row flex-row">
             <label>Local Filesystem Operation:</label>
             <select id="ref-file-action">
                 <option value="none">No Physical File Modification (String patch only)</option>
@@ -1067,6 +1069,7 @@
     }
 
     function getVirtualRpaths(id) {
+        if (!state.nodes[id]) return [];
         let rp = [...(state.nodes[id].rpaths || [])].map(v => ({val:v, state:'normal'}));
         pendingOps.forEach(op => {
             if (op.target !== id) return;
@@ -1095,6 +1098,7 @@
         EL('insp-name').innerText = node.fileName;
         EL('insp-name').style.color = node.isMissing ? 'var(--red)' : '';
         EL('insp-arch').innerText = node.isMissing ? "Unresolved Dependency" : (node.architecture || "Unknown Arch");
+
         EL('insp-path').innerText = node.absolutePath || "Not found on disk";
 
         const headerIcon = EL('insp-header-icon');
@@ -1248,10 +1252,11 @@
         activeRefParentId = selPath[selPath.length-2];
         activeRefChildId = selPath[selPath.length-1];
         const parentNode = state.nodes[activeRefParentId];
+        const childNode = state.nodes[activeRefChildId];
         activeRefOld = parentNode.children[activeRefChildId].originalReference;
 
         EL('ref-parent-name').innerText = parentNode.fileName;
-        EL('ref-subpath').value = state.nodes[activeRefChildId].fileName;
+        EL('ref-subpath').value = childNode.fileName;
         EL('ref-file-action').value = "none";
         EL('ref-type').value = "@rpath";
 
@@ -1262,7 +1267,7 @@
             rpSel.appendChild(opt);
         });
 
-        EL('row-ref-dropdown').style.display = 'block';
+        EL('row-ref-dropdown').style.display = 'flex';
         EL('ref-subpath-browse').style.display = 'none';
         EL('ref-subpath-label').innerText = "Reference Subpath:";
         EL('ref-subpath').placeholder = "e.g., av/libavformat.dylib";
@@ -1275,7 +1280,7 @@
         const isRpath = EL('ref-type').value === '@rpath';
         const isAbsolute = EL('ref-type').value === 'absolute';
 
-        EL('row-ref-dropdown').style.display = isRpath ? 'block' : 'none';
+        EL('row-ref-dropdown').style.display = isRpath ? 'flex' : 'none';
         EL('ref-subpath-browse').style.display = isAbsolute ? 'block' : 'none';
 
         if (isAbsolute) {
@@ -1314,7 +1319,7 @@
             finalRef = "@rpath/" + subpath;
             const activeParentRp = EL('ref-parent-rpath-sel').value;
             if (activeParentRp) {
-                const resolvedRp = activeParentRp.replace('@loader_path', parentDir).replace('@executable_path', parentDir);
+                const resolvedRp = activeParentRp.replace('@loader_path', parentDir);
                 targetPhysicalAbs = resolvedRp + "/" + subpath;
             } else {
                 targetPhysicalAbs = "No parent @rpath selected";
@@ -1322,10 +1327,6 @@
         } else if (type === '@loader_path') {
             finalRef = "@loader_path/" + subpath;
             targetPhysicalAbs = parentDir + "/" + subpath;
-        } else if (type === '@executable_path') {
-            finalRef = "@executable_path/" + subpath;
-            const execBase = parentDir.endsWith("Frameworks") ? parentDir.substring(0, parentDir.lastIndexOf('/')) + "/MacOS" : parentDir;
-            targetPhysicalAbs = execBase + "/" + subpath;
         } else {
             finalRef = subpath;
             targetPhysicalAbs = subpath;
@@ -1373,7 +1374,11 @@
         EL('browser').classList.add('disabled');
         document.body.classList.add('global-lock');
 
-        fetch('/api/apply', { method: 'POST', body: JSON.stringify({ops: pendingOps}) })
+        fetch('/api/apply', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ops: pendingOps})
+        })
             .then(r=>r.json()).then(d => {
             document.body.classList.remove('global-lock');
             EL('apply-btn').disabled = false;

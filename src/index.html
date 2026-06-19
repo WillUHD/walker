@@ -23,7 +23,6 @@
         }
         body { margin: 0; padding: 0; font-family: -apple-system, sans-serif; background: var(--bg); color: var(--text); display: flex; flex-direction: column; height: 100vh; overflow: hidden; }
         body.resizing * { user-select: none !important; -webkit-user-select: none !important; }
-        body.resizing .column-container { transition: none !important; }
 
         /* Top Bar */
         .top-bar { display: flex; padding: 12px 16px; background: var(--head); border-bottom: 1px solid var(--border); align-items: center; gap: 10px; flex-shrink: 0; }
@@ -41,10 +40,10 @@
         .main { display: flex; flex: 1; overflow: hidden; }
 
         /* Finder Columns Container */
-        .browser { flex: 1; display: flex; overflow-x: auto; overflow-y: hidden; background: var(--win); position: relative; outline: none; }
+        .browser { flex: 1; display: flex; overflow-x: auto; overflow-y: hidden; background: var(--win); position: relative; outline: none; scroll-behavior: smooth; }
         .browser.disabled { pointer-events: none; opacity: 0.55; }
 
-        /* Column layout with resizer and smooth transitions */
+        /* Column layout with resizer */
         .column-container {
             display: flex;
             height: 100%;
@@ -53,19 +52,31 @@
             box-sizing: border-box;
             border-right: 1px solid var(--border);
             width: 250px;
-            opacity: 1;
-            transition: width 0.22s cubic-bezier(0.4, 0.0, 0.2, 1), opacity 0.22s ease;
             overflow: hidden;
         }
-        .column-container.removing {
-            width: 0px !important;
-            opacity: 0 !important;
-            pointer-events: none !important;
-            border-right: none !important;
+        .column {
+            width: 100%;
+            overflow-y: auto;
+            overflow-x: hidden;
+            padding: 4px 0 80px 0; /* Expanded bottom padding to prevent clipping of bottom-most items */
+            position: relative;
+            min-height: 100%;
+            box-sizing: border-box;
         }
-        .column { width: 100%; overflow-y: auto; overflow-x: hidden; padding: 4px 0; position: relative; min-height: 100%; }
-        .resize-handle { width: 4px; background: transparent; cursor: col-resize; position: relative; height: 100%; z-index: 10; transition: background 0.1s; border-right: 1px solid var(--border); }
-        .resize-handle:hover { background: var(--blue); }
+        .resize-handle {
+            width: 5px;
+            background: transparent;
+            cursor: col-resize;
+            position: absolute;
+            right: 0;
+            top: 0;
+            height: 100%;
+            z-index: 10;
+            transition: background 0.15s;
+        }
+        .resize-handle:hover {
+            background: var(--border);
+        }
 
         /* Items */
         .col-item { display: flex; align-items: center; justify-content: space-between; padding: 6px 10px; margin: 0 6px; border-radius: 4px; cursor: pointer; font-size: 13px; user-select: none; }
@@ -88,25 +99,37 @@
 
         /* Inspector Pane */
         .inspector { width: 340px; background: var(--head); border-left: 1px solid var(--border); display: flex; flex-direction: column; overflow-y: auto; flex-shrink: 0; }
-        .insp-header { padding: 20px; text-align: center; border-bottom: 1px solid var(--border); }
-        .insp-header h3 { margin: 0; font-size: 15px; word-break: break-all; }
-        .insp-header p { margin: 4px 0 0; font-size: 11px; color: var(--dim); }
 
-        .insp-section { padding: 12px 16px; border-bottom: 1px solid var(--border); font-size: 12px; }
+        /* Card block styling for sections */
+        .insp-section {
+            margin: 12px;
+            padding: 14px;
+            background: var(--win);
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            font-size: 12px;
+        }
+        @media (prefers-color-scheme: dark) {
+            .insp-section {
+                background: #242426;
+            }
+        }
         .insp-section h4 { margin: 0 0 10px; font-size: 13px; font-weight: 600; color: var(--text); text-transform: none; }
 
         /* Pending Purple Section */
-        .insp-section.pending-section { background: var(--purple-light); border-bottom: 1px solid rgba(160, 90, 255, 0.25); }
+        .insp-section.pending-section { background: var(--purple-light); border: 1px solid rgba(160, 90, 255, 0.25); }
         .insp-section.pending-section h4 { color: var(--purple); }
 
         .prop-row { display: flex; flex-direction: column; gap: 4px; margin-bottom: 10px; }
         .prop-val { font-family: monospace; background: var(--win); padding: 4px 6px; border-radius: 4px; border: 1px solid var(--border); word-break: break-all; }
+        @media (prefers-color-scheme: dark) { .prop-val { background: var(--bg); } }
 
         .pill-box { display: flex; flex-wrap: wrap; gap: 6px; }
         .pill { background: var(--btn); border: 1px solid var(--btn-border); padding: 2px 8px; border-radius: 12px; font-size: 10px; }
 
         /* RPaths List */
         .list-box { background: var(--win); border: 1px solid var(--border); border-radius: 6px; overflow: hidden; max-height: 150px; overflow-y: auto; margin-bottom: 8px; }
+        @media (prefers-color-scheme: dark) { .list-box { background: var(--bg); } }
         .list-item { padding: 6px 10px; cursor: pointer; border-bottom: 1px solid var(--border); }
         .list-item:last-child { border-bottom: none; }
         .list-item:hover { background: rgba(0,0,0,0.05); }
@@ -130,7 +153,7 @@
         .fb-header { display: flex; padding: 12px 16px; background: var(--head); border-bottom: 1px solid var(--border); align-items: center; gap: 8px; }
         .fb-address-container { display: flex; gap: 6px; flex: 1; max-width: 500px; margin-left: auto; align-items: center; }
         .fb-address { flex: 1; padding: 4px 8px; border-radius: 4px; border: 1px solid var(--border); background: var(--win); color: var(--text); outline: none; font-size: 12px; }
-        .fb-body { display: flex; flex-direction: row; height: 350px; overflow-x: auto; overflow-y: hidden; background: var(--win); position: relative; }
+        .fb-body { display: flex; flex-direction: row; height: 350px; overflow-x: auto; overflow-y: hidden; background: var(--win); position: relative; scroll-behavior: smooth; }
         .fb-body .column-container { border-right: 1px solid var(--border); }
         .fb-footer { display: flex; justify-content: flex-end; padding: 12px 16px; background: var(--head); border-top: 1px solid var(--border); gap: 10px; }
 
@@ -160,10 +183,12 @@
     <div class="browser" id="browser" tabindex="0"></div>
 
     <div class="inspector" id="inspector" style="display:none;">
-        <div class="insp-header">
-            <div id="insp-header-icon" style="margin-bottom:10px; display:inline-block;"></div>
-            <h3 id="insp-name">libname.dylib</h3>
-            <p id="insp-arch">Architecture</p>
+        <div class="insp-header" style="display: flex; gap: 14px; align-items: center; text-align: left; padding: 16px; border-bottom: 1px solid var(--border);">
+            <div id="insp-header-icon" style="flex-shrink: 0; width: 48px; height: 48px; display: flex; align-items: center; justify-content: center;"></div>
+            <div style="flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px;">
+                <h3 id="insp-name" style="margin: 0; font-size: 15px; font-weight: 600; word-break: break-word; line-height: 1.2;">libname.dylib</h3>
+                <p id="insp-arch" style="margin: 2px 0 0; font-size: 11px; color: var(--dim);">Architecture</p>
+            </div>
         </div>
 
         <!-- Modifications Preview Section -->
@@ -172,43 +197,44 @@
             <div id="insp-mods-list"></div>
         </div>
 
+        <!-- Parent Connection card block -->
         <div class="insp-section" id="sec-conn" style="display:none;">
-            <h4>Parent Connection</h4>
-            <div class="prop-row">
-                <span>Resolved Mechanism:</span>
-                <div class="prop-val" id="insp-conn-mech"></div>
-            </div>
-            <div class="prop-row">
-                <span>Reference String:</span>
+            <h4 style="margin: 0 0 10px; font-size: 13px; font-weight: 600; display: flex; justify-content: space-between; align-items: center;">
+                <span>Parent Connection</span>
+                <span id="insp-conn-mech" style="font-family: monospace; font-size: 10px; background: rgba(0,0,0,0.06); padding: 2px 6px; border-radius: 4px; font-weight: normal;">@loader_path</span>
+            </h4>
+            <div class="prop-row" style="margin-top:8px;">
+                <span style="color: var(--dim); margin-bottom: 2px;">Reference String:</span>
                 <div class="prop-val" id="insp-conn-ref"></div>
             </div>
-            <button id="fix-dep-btn" class="primary" style="width:100%;">Change Reference...</button>
+            <button id="fix-dep-btn" class="primary" style="width:100%; margin-top: 4px;">Change Reference...</button>
         </div>
 
+        <!-- Properties Block with Show hidden Pill Button -->
         <div class="insp-section">
-            <h4>Properties</h4>
-            <div class="prop-row">
-                <span>Absolute Path:</span>
-                <div class="prop-val" id="insp-path"></div>
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
+                <h4 style="margin: 0; font-size: 13px; font-weight: 600;">Properties</h4>
+                <button id="toggle-sys" style="border-radius: 12px; font-size: 11px; padding: 2px 10px; transition: all 0.15s;">Show hidden</button>
             </div>
-            <div class="prop-row" style="flex-direction:row; justify-content:space-between; align-items:center;">
-                <span>Show System Libraries</span>
-                <input type="checkbox" id="toggle-sys" style="width:auto; margin:0;" />
+            <div class="prop-row">
+                <span style="color: var(--dim); margin-bottom: 4px;">Absolute Path:</span>
+                <div class="prop-val" id="insp-path"></div>
             </div>
             <div class="pill-box" id="insp-flags" style="margin-top:10px;"></div>
         </div>
 
+        <!-- RPaths Card Block -->
         <div class="insp-section">
-            <h4>@rpaths</h4>
-            <div class="list-box" id="rpath-list"></div>
-            <div class="btn-row" style="margin-bottom:6px;">
-                <button id="rp-add">Add</button>
-                <button id="rp-del" disabled>Remove</button>
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
+                <h4 style="margin: 0; font-size: 13px; font-weight: 600;">@rpaths</h4>
+                <div style="display: flex; gap: 4px;">
+                    <button id="rp-add" class="icon-btn" title="Add RPath" style="padding: 4px 8px;">➕</button>
+                    <button id="rp-del" class="icon-btn" title="Remove RPath" disabled style="padding: 4px 8px;">🗑️</button>
+                    <button id="rp-ren" class="icon-btn" title="Rename RPath" disabled style="padding: 4px 8px;">✏️</button>
+                    <button id="rp-ref" class="icon-btn" title="Refactor RPath" disabled style="padding: 4px 8px;">⚙️</button>
+                </div>
             </div>
-            <div class="btn-row">
-                <button id="rp-ren" disabled>Rename</button>
-                <button id="rp-ref" disabled>Refactor</button>
-            </div>
+            <div class="list-box" id="rpath-list" style="max-height: 180px;"></div>
         </div>
     </div>
 </div>
@@ -319,7 +345,7 @@
     let activeRpathIndex = -1;
     let showSystemLibs = false;
     let pollTimer = null;
-    let pruneTimeout = null;
+    let columnWidths = {}; // Persistent tracker for resized widths
 
     let conflictOpCache = null;
     let nudgeOpCache = null;
@@ -329,6 +355,7 @@
     let fbSelectFolderMode = false;
     let fbSelectedPath = "";
     let fbSelPath = []; // Navigation trace of { path, files } columns
+    let fbActiveLevel = 0; // Focus tracking level for file selector modal keyboard events
 
     const EL = (id) => document.getElementById(id);
 
@@ -356,12 +383,17 @@
 
         const col = document.createElement('div');
         col.className = 'column';
+
+        container.appendChild(col);
+
         if (onEmptyClick) {
-            col.onclick = (e) => {
-                if (e.target === col) onEmptyClick();
+            container.onclick = (e) => {
+                // Trigger if user clicked on background of container or column
+                if (e.target === container || e.target === col) {
+                    onEmptyClick();
+                }
             };
         }
-        container.appendChild(col);
         return { container, col };
     }
 
@@ -393,12 +425,14 @@
                 body: JSON.stringify({path: EL('target-in').value.trim()})
             });
             btn.innerText = "Cancel"; EL('browse-btn').disabled = true;
+            EL('target-in').readOnly = true; // Lock top text field during scanning
             EL('browser').classList.add('disabled');
             pendingOps = []; updateApplyBtn(); startPolling();
         } else if (btn.innerText === "Cancel") {
             fetch('/api/clear', {method:'POST'}).then(()=>{
                 btn.innerText = "Resolve";
                 EL('browse-btn').disabled = false;
+                EL('target-in').readOnly = false;
                 EL('browser').classList.remove('disabled');
                 stopPolling();
                 render();
@@ -407,6 +441,7 @@
             fetch('/api/clear', {method:'POST'}).then(()=>{
                 state = {root:"", nodes:{}}; selPath = []; pendingOps = [];
                 EL('target-in').value = ""; btn.innerText = "Resolve"; btn.disabled=true;
+                EL('target-in').readOnly = false; // Permit top editing on clear
                 EL('browse-btn').disabled = false; EL('inspector').style.display='none';
                 EL('browser').classList.remove('disabled');
                 updateApplyBtn(); render();
@@ -414,10 +449,28 @@
         }
     });
 
-    EL('toggle-sys').addEventListener('change', (e) => {
-        showSystemLibs = e.target.checked;
+    // Pill Button Toggle System Hidden Libraries Trigger
+    EL('toggle-sys').onclick = () => {
+        showSystemLibs = !showSystemLibs;
+        updateSysToggleUI();
         render();
-    });
+    };
+
+    function updateSysToggleUI() {
+        const btn = EL('toggle-sys');
+        if (showSystemLibs) {
+            btn.style.background = 'var(--blue)';
+            btn.style.color = '#fff';
+            btn.style.borderColor = 'transparent';
+        } else {
+            btn.style.background = 'var(--btn)';
+            btn.style.color = 'var(--text)';
+            btn.style.borderColor = 'var(--btn-border)';
+        }
+    }
+
+    // Set initial toggle state UI
+    updateSysToggleUI();
 
     function startPolling() { if(!pollTimer) pollTimer = setInterval(poll, 500); }
     function stopPolling() { clearInterval(pollTimer); pollTimer = null; }
@@ -454,8 +507,8 @@
         fbSelectedPath = "";
         EL('fb-select').disabled = true;
         fbSelPath = [];
+        fbActiveLevel = 0;
 
-        // Determine first parent folder from target to avoid empty directories
         let initialPath = state.root || "/";
         if (initialPath.endsWith(".dylib") || initialPath.endsWith(".framework") || initialPath.includes(".")) {
             initialPath = initialPath.substring(0, initialPath.lastIndexOf("/")) || "/";
@@ -498,6 +551,7 @@
             const results = await Promise.all(promises);
             fbSelPath = results.map(r => ({ path: r.currentPath, files: r.files }));
             fbSelectedPath = resolvedPath;
+            fbActiveLevel = segments.length - 1;
 
             renderFbColumns();
             EL('fb-select').disabled = fbSelectFolderMode ? false : true;
@@ -528,22 +582,99 @@
             });
     }
 
+    // File Browser Reconciled Column Layout
     function renderFbColumns() {
         const browser = EL('fb-browser');
-        const scrollPositions = Array.from(browser.querySelectorAll('.column')).map(c => c.scrollTop);
-
-        browser.innerHTML = "";
 
         fbSelPath.forEach((colData, level) => {
-            const { container, col } = createColumn('220px', () => {
-                fbSelPath = fbSelPath.slice(0, level);
-                fbSelectedPath = level > 0 ? fbSelPath[level - 1].path : "";
-                EL('fb-address').value = fbSelectedPath;
-                EL('fb-select').disabled = true;
-                renderFbColumns();
-            });
+            const existingCol = browser.children[level];
+            const colPath = colData.path;
 
-            colData.files.sort((a,b) => b.isDir - a.isDir || a.name.localeCompare(b.name)).forEach(f => {
+            if (existingCol) {
+                const existingColPath = existingCol.getAttribute('data-path');
+                if (existingColPath === colPath) {
+                    updateFbColumnItems(existingCol, level, colData.files);
+                } else {
+                    // Erase stale columns instantly to prevent double column layout jumps
+                    while (browser.children[level]) {
+                        browser.children[level].remove();
+                    }
+                    const newColContainer = createFbColumnDOM(level, colPath, colData.files);
+                    browser.appendChild(newColContainer);
+                }
+            } else {
+                const newColContainer = createFbColumnDOM(level, colPath, colData.files);
+                browser.appendChild(newColContainer);
+            }
+        });
+
+        // Delete trailing columns
+        while (browser.children[fbSelPath.length]) {
+            browser.children[fbSelPath.length].remove();
+        }
+
+        alignViewport(browser, fbSelPath.length - 1);
+    }
+
+    function createFbColumnDOM(level, colPath, files) {
+        const { container, col } = createColumn('220px', () => {
+            fbSelPath = fbSelPath.slice(0, level);
+            fbSelectedPath = level > 0 ? fbSelPath[level - 1].path : "";
+            EL('fb-address').value = fbSelectedPath;
+            EL('fb-select').disabled = true;
+            fbActiveLevel = Math.max(0, level - 1);
+            renderFbColumns();
+        });
+
+        container.setAttribute('data-path', colPath);
+        container.setAttribute('data-level', level);
+
+        files.sort((a,b) => b.isDir - a.isDir || a.name.localeCompare(b.name)).forEach(f => {
+            const div = document.createElement('div');
+            const isSelected = (fbSelectedPath === f.absPath) || (fbSelPath[level + 1] && fbSelPath[level + 1].path === f.absPath);
+
+            div.className = 'col-item' + (isSelected ? ' selected' : '');
+            div.innerHTML = makeItemInner(f.name, f.isDir, f.isDir, '📄');
+
+            div.onclick = () => {
+                fbActiveLevel = level;
+                fbSelectedPath = f.absPath;
+                EL('fb-address').value = f.absPath;
+                if (f.isDir) {
+                    navigateFbCol(level + 1, f.absPath);
+                } else {
+                    fbSelPath = fbSelPath.slice(0, level + 1);
+                    renderFbColumns();
+                }
+                EL('fb-select').disabled = fbSelectFolderMode ? !f.isDir : f.isDir;
+            };
+
+            col.appendChild(div);
+        });
+
+        return container;
+    }
+
+    function updateFbColumnItems(container, level, files) {
+        const col = container.querySelector('.column');
+        const savedScrollTop = col.scrollTop;
+
+        const existingItems = Array.from(col.querySelectorAll('.col-item'));
+        const sortedFiles = [...files].sort((a,b) => b.isDir - a.isDir || a.name.localeCompare(b.name));
+
+        if (existingItems.length === sortedFiles.length) {
+            existingItems.forEach((item, idx) => {
+                const f = sortedFiles[idx];
+                const isSelected = (fbSelectedPath === f.absPath) || (fbSelPath[level + 1] && fbSelPath[level + 1].path === f.absPath);
+                if (isSelected) {
+                    item.classList.add('selected');
+                } else {
+                    item.classList.remove('selected');
+                }
+            });
+        } else {
+            col.innerHTML = "";
+            sortedFiles.forEach(f => {
                 const div = document.createElement('div');
                 const isSelected = (fbSelectedPath === f.absPath) || (fbSelPath[level + 1] && fbSelPath[level + 1].path === f.absPath);
 
@@ -551,6 +682,7 @@
                 div.innerHTML = makeItemInner(f.name, f.isDir, f.isDir, '📄');
 
                 div.onclick = () => {
+                    fbActiveLevel = level;
                     fbSelectedPath = f.absPath;
                     EL('fb-address').value = f.absPath;
                     if (f.isDir) {
@@ -564,16 +696,60 @@
 
                 col.appendChild(div);
             });
+            col.scrollTop = savedScrollTop;
+        }
+    }
 
-            container.appendChild(col);
-            browser.appendChild(container);
+    // Keyboard Navigation Inside File Browser Modal
+    function handleFbKeyboardNav(e) {
+        if (fbSelPath.length === 0) return;
 
-            if (scrollPositions[level] !== undefined) {
-                col.scrollTop = scrollPositions[level];
+        const browser = EL('fb-browser');
+        const colContainers = Array.from(browser.querySelectorAll('.column-container'));
+        const activeColContainer = colContainers[fbActiveLevel];
+        if (!activeColContainer) return;
+
+        const activeCol = activeColContainer.querySelector('.column');
+        const items = Array.from(activeCol.querySelectorAll('.col-item'));
+        const currentIndex = items.findIndex(item => item.classList.contains('selected'));
+
+        if (e.key === 'ArrowUp') {
+            e.preventDefault();
+            let nextIndex = currentIndex - 1;
+            if (nextIndex >= 0) {
+                items[nextIndex].click();
             }
-        });
-
-        alignViewport(browser, fbSelPath.length - 1);
+        } else if (e.key === 'ArrowDown') {
+            e.preventDefault();
+            let nextIndex = currentIndex + 1;
+            if (nextIndex < items.length) {
+                items[nextIndex].click();
+            }
+        } else if (e.key === 'ArrowLeft') {
+            e.preventDefault();
+            if (fbActiveLevel > 0) {
+                fbActiveLevel--;
+                const parentCol = colContainers[fbActiveLevel];
+                const selectedItem = parentCol.querySelector('.col-item.selected');
+                if (selectedItem) {
+                    selectedItem.click();
+                } else {
+                    alignViewport(browser, fbActiveLevel);
+                }
+            }
+        } else if (e.key === 'ArrowRight') {
+            e.preventDefault();
+            if (fbActiveLevel + 1 < colContainers.length) {
+                fbActiveLevel++;
+                const childCol = colContainers[fbActiveLevel];
+                const firstChildItem = childCol.querySelector('.col-item');
+                if (firstChildItem) {
+                    firstChildItem.click();
+                } else {
+                    alignViewport(browser, fbActiveLevel);
+                }
+            }
+        }
     }
 
     EL('fb-cancel').onclick = () => { fbResolveCallback(null); closeFileBrowser(); };
@@ -593,8 +769,10 @@
         if (!isResizing || !activeHandle) return;
         const diff = e.clientX - startX;
         const container = activeHandle.parentElement; // Target container directly
+        const level = container.getAttribute('data-level');
         const newWidth = Math.max(150, Math.min(600, startWidth + diff));
         container.style.width = newWidth + 'px';
+        columnWidths[level] = newWidth + 'px'; // Save width locally to preserve state
     });
 
     document.addEventListener('mouseup', () => {
@@ -607,11 +785,18 @@
     // --- Keyboard Navigation Engine (Finder Simulation) ---
     window.addEventListener('keydown', (e) => {
         if (document.activeElement && (document.activeElement.tagName === 'INPUT' || document.activeElement.tagName === 'SELECT')) return;
+
+        // Route navigation focus inside file selector modal if open
+        if (EL('fb-overlay').classList.contains('active')) {
+            handleFbKeyboardNav(e);
+            return;
+        }
+
         if (selPath.length === 0) return;
 
         const activeLevel = selPath.length - 1;
         const activeId = selPath[activeLevel];
-        const colContainers = Array.from(EL('browser').querySelectorAll('.column-container:not(.removing)'));
+        const colContainers = Array.from(EL('browser').querySelectorAll('.column-container'));
         const activeColContainer = colContainers[activeLevel];
         if (!activeColContainer) return;
 
@@ -640,7 +825,6 @@
                 renderAndAlignColumn(activeLevel - 1);
             }
         } else if (e.key === 'ArrowRight') {
-            e.preventDefault();
             const node = state.nodes[activeId];
             if (node) {
                 const visibleChildren = Object.keys(node.children).filter(cid => {
@@ -648,6 +832,7 @@
                     return child && (showSystemLibs || !child.isSystem);
                 });
                 if (visibleChildren.length > 0) {
+                    e.preventDefault();
                     selPath.push(visibleChildren[0]);
                     renderAndAlignColumn(activeLevel + 1);
                 }
@@ -664,7 +849,7 @@
 
     // Unified Fluid Horizontal Viewport Alignments (Both Directions)
     function alignViewport(container, targetLevel) {
-        const cols = Array.from(container.querySelectorAll('.column-container:not(.removing)'));
+        const cols = Array.from(container.querySelectorAll('.column-container'));
         if (!cols[targetLevel]) return;
 
         const targetCol = cols[targetLevel];
@@ -704,6 +889,17 @@
             return;
         }
 
+        // Clean up and truncate selection path if nodes have become hidden
+        let validPath = [];
+        for (let i = 0; i < selPath.length; i++) {
+            const id = selPath[i];
+            const node = state.nodes[id];
+            if (!node) break;
+            if (!showSystemLibs && node.isSystem) break;
+            validPath.push(id);
+        }
+        selPath = validPath;
+
         let columnsToRender = [];
         columnsToRender.push({ level: 0, parentId: null, ids: [state.root] });
 
@@ -718,50 +914,36 @@
             }
         }
 
-        const existingCols = Array.from(b.querySelectorAll('.column-container:not(.removing)'));
-
-        // Mark expiring columns with collapsing class
-        const allCols = Array.from(b.querySelectorAll('.column-container'));
-        allCols.forEach((colEl, idx) => {
-            if (idx >= columnsToRender.length) {
-                colEl.classList.add('removing');
-            }
-        });
-
         // Reconcile and draw remaining columns in-place
         columnsToRender.forEach((colInfo, index) => {
-            const existingCol = existingCols[index];
+            const existingCol = b.children[index];
             const parentNodeId = colInfo.parentId;
             const ids = colInfo.ids;
 
-            if (existingCol && existingCol.getAttribute('data-parent-id') === String(parentNodeId)) {
-                existingCol.classList.remove('removing');
-                updateColumnItems(existingCol, index, ids);
-            } else {
-                if (existingCol) {
-                    existingCol.classList.add('removing');
-                }
-                const newColContainer = createColumnDOM(index, parentNodeId, ids);
-                const firstRemoving = b.querySelector('.column-container.removing');
-                if (firstRemoving) {
-                    b.insertBefore(newColContainer, firstRemoving);
+            if (existingCol) {
+                const colParentId = existingCol.getAttribute('data-parent-id');
+                if (colParentId === String(parentNodeId)) {
+                    updateColumnItems(existingCol, index, ids);
                 } else {
+                    // Instantly drop mismatched columns and branches to prevent double rendering flash
+                    while (b.children[index]) {
+                        b.children[index].remove();
+                    }
+                    const newColContainer = createColumnDOM(index, parentNodeId, ids);
                     b.appendChild(newColContainer);
                 }
+            } else {
+                const newColContainer = createColumnDOM(index, parentNodeId, ids);
+                b.appendChild(newColContainer);
             }
         });
 
-        scheduleColumnPruning();
-        renderInspector();
-    }
+        // Prune obsolete columns from path
+        while (b.children[columnsToRender.length]) {
+            b.children[columnsToRender.length].remove();
+        }
 
-    function scheduleColumnPruning() {
-        if (pruneTimeout) clearTimeout(pruneTimeout);
-        pruneTimeout = setTimeout(() => {
-            const b = EL('browser');
-            const toRemove = b.querySelectorAll('.column-container.removing');
-            toRemove.forEach(el => el.remove());
-        }, 230);
+        renderInspector();
     }
 
     function isNodeModified(id) {
@@ -776,8 +958,10 @@
             return true;
         });
 
-        // Enforce residual space click de-selection logic on columns
-        const { container, col } = createColumn('250px', () => {
+        // Load custom widths if configured from drag session
+        const width = columnWidths[level] || '250px';
+
+        const { container, col } = createColumn(width, () => {
             if (level > 0) {
                 selPath = selPath.slice(0, level);
                 renderAndAlignColumn(level - 1);
@@ -901,6 +1085,12 @@
         const parentId = selPath.length > 1 ? selPath[selPath.length - 2] : null;
         const node = state.nodes[id];
 
+        // Do not display if active selected node is system library and hidden mode is off
+        if (!showSystemLibs && node.isSystem) {
+            insp.style.display = 'none';
+            return;
+        }
+
         insp.style.display = 'flex';
         EL('insp-name').innerText = node.fileName;
         EL('insp-name').style.color = node.isMissing ? 'var(--red)' : '';
@@ -963,9 +1153,23 @@
             const d = document.createElement('div');
             d.className = 'list-item' + (activeRpathIndex===i ? ' selected' : '') + (rp.state==='deleted'?' deleted':'') + (rp.state==='added'?' added':'');
             d.innerText = rp.val;
-            d.onclick = () => { activeRpathIndex = i; renderInspector(); };
+            d.onclick = (e) => {
+                e.stopPropagation();
+                // Permit deselection if clicking already focused list item
+                if (activeRpathIndex === i) activeRpathIndex = -1;
+                else activeRpathIndex = i;
+                renderInspector();
+            };
             EL('rpath-list').appendChild(d);
         });
+
+        // Click outside list items triggers deselection
+        EL('rpath-list').onclick = (e) => {
+            if (e.target === EL('rpath-list')) {
+                activeRpathIndex = -1;
+                renderInspector();
+            }
+        };
 
         const hasValidRpSel = activeRpathIndex >= 0 && vRpaths[activeRpathIndex].state !== 'deleted';
         EL('rp-del').disabled = !hasValidRpSel;

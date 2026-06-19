@@ -97,6 +97,7 @@ public class Main {
 
         if (web) {
             try {
+                logging = verbose;
                 startWebServer(port);
                 synchronized (Main.class) {Main.class.wait();}
             } catch (Exception e) {
@@ -624,81 +625,96 @@ public class Main {
 
     @SuppressWarnings("unchecked")
     static Map<String, Object> applyPatchBatch(Map<String, Object> payload) {
-        t.println("\nCurrent patch log:", Terminal.Text.bold, Terminal.Colors.brightBlue);
-        var ops = (List<Map<String, Object>>) payload.get("ops");
-        var affectedTargets = new LinkedHashSet<String>();
-
-        for (var op : ops) {
-            if ("refactor_rpath".equals(op.get("type"))) {
-                var conflict = checkRefactorConflicts(op);
-                if (conflict != null && !op.containsKey("conflict_resolution"))
-                    return Map.of("success", false, "conflict", conflict, "op", op);
-            } else if ("change_dep_with_file".equals(op.get("type"))) {
-                var actionType = (String) op.get("file_action");
-                var childId = (String) op.get("childId");
-                var childNode = stateNodes.get(childId);
-
-                if ("move".equals(actionType) && childNode != null && childNode.incomingEdgesCount > 1 && !op.containsKey("force"))
-                    return Map.of("success", false, "shared_warning", true, "childName", childNode.fileName, "incomingCount", childNode.incomingEdgesCount, "op", op);
-            }
+        if (logging) {
+            t.println("\nCurrent patch log:", Terminal.Text.bold, Terminal.Colors.brightBlue);
+        } else {
+            IO.print("Patching...\u001B[?7l");
         }
 
-        for (var op : ops) {
-            var type = (String) op.get("type");
-            var target = (String) op.get("target");
+        try {
+            var ops = (List<Map<String, Object>>) payload.get("ops");
+            var affectedTargets = new LinkedHashSet<String>();
 
-            if (target != null) affectedTargets.add(target);
+            for (var op : ops) {
+                if ("refactor_rpath".equals(op.get("type"))) {
+                    var conflict = checkRefactorConflicts(op);
+                    if (conflict != null && !op.containsKey("conflict_resolution"))
+                        return Map.of("success", false, "conflict", conflict, "op", op);
+                } else if ("change_dep_with_file".equals(op.get("type"))) {
+                    var actionType = (String) op.get("file_action");
+                    var childId = (String) op.get("childId");
+                    var childNode = stateNodes.get(childId);
 
-            switch (type) {
-                case "add_rpath" -> {
-                    var val = (String) op.get("val");
-                    t.println("  - Adding rpath to " + target + ": " + val, Terminal.Text.dim);
-                    exec("install_name_tool", "-add_rpath", val, target);
+                    if ("move".equals(actionType) && childNode != null && childNode.incomingEdgesCount > 1 && !op.containsKey("force"))
+                        return Map.of("success", false, "shared_warning", true, "childName", childNode.fileName, "incomingCount", childNode.incomingEdgesCount, "op", op);
                 }
-                case "delete_rpath" -> {
-                    var val = (String) op.get("val");
-                    t.println("  - Deleting rpath from " + target + ": " + val, Terminal.Text.dim);
-                    exec("install_name_tool", "-delete_rpath", val, target);
-                }
-                case "rename_rpath" -> {
-                    var oldV = (String) op.get("oldVal");
-                    var newV = (String) op.get("newVal");
-                    t.println("  - Renaming rpath in " + target + " from " + oldV + " to " + newV, Terminal.Text.dim);
-                    exec("install_name_tool", "-rpath", oldV, newV, target);
-                }
-                case "refactor_rpath" -> {
-                    var oldV = (String) op.get("oldVal");
-                    var newV = (String) op.get("newVal");
-                    var res = (String) op.get("conflict_resolution");
-                    t.println("  - Refactoring rpath in " + target + " from " + oldV + " to " + newV, Terminal.Text.dim);
+            }
 
-                    var copied = performRefactorCopy(target, oldV, newV, res);
-                    affectedTargets.addAll(copied);
-                    exec("install_name_tool", "-rpath", oldV, newV, target);
+            for (var op : ops) {
+                var type = (String) op.get("type");
+                var target = (String) op.get("target");
+
+                if (target != null) affectedTargets.add(target);
+
+                switch (type) {
+                    case "add_rpath" -> {
+                        var val = (String) op.get("val");
+                        log("  - Adding rpath to " + target + ": " + val);
+                        exec("install_name_tool", "-add_rpath", val, target);
+                    }
+                    case "delete_rpath" -> {
+                        var val = (String) op.get("val");
+                        log("  - Deleting rpath from " + target + ": " + val);
+                        exec("install_name_tool", "-delete_rpath", val, target);
+                    }
+                    case "rename_rpath" -> {
+                        var oldV = (String) op.get("oldVal");
+                        var newV = (String) op.get("newVal");
+                        log("  - Renaming rpath in " + target + " from " + oldV + " to " + newV);
+                        exec("install_name_tool", "-rpath", oldV, newV, target);
+                    }
+                    case "refactor_rpath" -> {
+                        var oldV = (String) op.get("oldVal");
+                        var newV = (String) op.get("newVal");
+                        var res = (String) op.get("conflict_resolution");
+                        log("  - Refactoring rpath in " + target + " from " + oldV + " to " + newV);
+
+                        var copied = performRefactorCopy(target, oldV, newV, res);
+                        affectedTargets.addAll(copied);
+                        exec("install_name_tool", "-rpath", oldV, newV, target);
+                    }
+                    case "change_dep" -> {
+                        var oldRef = (String) op.get("oldRef");
+                        var newRef = (String) op.get("newRef");
+                        log("  - Changing reference string in " + target + " from " + oldRef + " to " + newRef);
+                        exec("install_name_tool", "-change", oldRef, newRef, target);
+                    }
+                    case "change_dep_with_file" -> {
+                        var dest = executeChangeDepWithFile(op);
+                        if (dest != null) affectedTargets.add(dest);
+                    }
+                    default -> {}
                 }
-                case "change_dep" -> {
-                    var oldRef = (String) op.get("oldRef");
-                    var newRef = (String) op.get("newRef");
-                    t.println("  - Changing reference string in " + target + " from " + oldRef + " to " + newRef, Terminal.Text.dim);
-                    exec("install_name_tool", "-change", oldRef, newRef, target);
+            }
+
+            for (var tgt : affectedTargets) {
+                if (tgt != null && Files.exists(Path.of(tgt))) {
+                    log("  - Re-signing altered binary: " + tgt);
+                    exec("codesign", "-f", "-s", "-", tgt);
                 }
-                case "change_dep_with_file" -> {
-                    var dest = executeChangeDepWithFile(op);
-                    if (dest != null) affectedTargets.add(dest);
-                }
-                default -> {}
+            }
+
+            if (logging) {
+                t.println("Patching complete.\n", Terminal.Text.bold, Terminal.Colors.brightBlue);
+            } else {
+                IO.print("\rPatching complete.\u001B[K\n");
+            }
+            return Map.of("success", true);
+        } finally {
+            if (!logging) {
+                IO.print("\u001B[?7h");
             }
         }
-
-        for (var tgt : affectedTargets) {
-            if (tgt != null && Files.exists(Path.of(tgt))) {
-                t.println("  - Re-signing altered binary: " + tgt, Terminal.Text.dim);
-                exec("codesign", "-f", "-s", "-", tgt);
-            }
-        }
-
-        t.println("Patching complete.\n", Terminal.Text.bold, Terminal.Colors.brightBlue);
-        return Map.of("success", true);
     }
 
     static String executeChangeDepWithFile(Map<String, Object> op) {
@@ -717,16 +733,16 @@ public class Main {
             if (!"none".equals(action) && Files.exists(src) && !src.toRealPath().equals(dest.toAbsolutePath())) {
                 Files.createDirectories(dest.getParent());
                 if ("move".equals(action)) {
-                    IO.println("Moving physical binary: " + src + " -> " + dest);
+                    log("Moving physical binary: " + src + " -> " + dest);
                     Files.move(src, dest, StandardCopyOption.REPLACE_EXISTING);
                 } else {
-                    IO.println("Copying physical binary: " + src + " -> " + dest);
+                    log("Copying physical binary: " + src + " -> " + dest);
                     Files.copy(src, dest, StandardCopyOption.REPLACE_EXISTING);
                 }
                 fileAltered = true;
             }
 
-            t.println("  - Updating Mach-O reference in: " + targetParent, Terminal.Text.dim);
+            log("  - Updating Mach-O reference in: " + targetParent);
             exec("install_name_tool", "-change", oldRef, newRef, targetParent);
 
             if (fileAltered) return destPathVal;
@@ -787,14 +803,14 @@ public class Main {
                     var dest = destDir.resolve(src.getFileName());
                     if (Files.exists(dest)) {
                         if ("skip".equals(resolution)) {
-                            t.println("  - Skipping copy: " + dest, Terminal.Text.dim);
+                            log("  - Skipping copy: " + dest);
                             continue;
                         } else if ("replace".equals(resolution)) {
-                            t.println("  - Renaming existing conflict destination to " + dest + "-old", Terminal.Text.dim);
+                            log("  - Renaming existing conflict destination to " + dest + "-old");
                             Files.move(dest, Path.of(dest.toString() + "-old"), StandardCopyOption.REPLACE_EXISTING);
                         }
                     }
-                    t.println("  - Copying refactored file: " + src + " -> " + dest, Terminal.Text.dim);
+                    log("  - Copying refactored file: " + src + " -> " + dest);
                     Files.copy(src, dest, StandardCopyOption.REPLACE_EXISTING);
                     copiedPaths.add(dest.toString());
                 }
